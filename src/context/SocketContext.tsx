@@ -14,7 +14,7 @@ import apiClient from '../api/apiClient';
 import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
 
-const SOCKET_URL = 'https://karmacoin-backend-10.onrender.com';
+const SOCKET_URL = 'https://karmacoin-backend-testing.onrender.com';
 const GPS_INTERVAL_MS = 30000; // 30 seconds
 
 interface IncomingBooking {
