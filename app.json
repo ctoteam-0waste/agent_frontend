@@ -1,4 +1,4 @@
-﻿{
+{
   "expo": {
     "name": "KarmaVer$e - Agent",
     "slug": "KarmaCredits-Agent",
@@ -27,6 +27,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e6b28574-a023-4e26-8178-5d0d19d0e1c2"
+      }
+    },
+    "owner": "cinsin",
+    "plugins": [
+      "./plugins/withMapplsMaven.js"
+    ]
   }
 }
