@@ -231,7 +231,8 @@ const translations: Translations = {
   reviewFinalItems: { en: 'Please review the final collected items before closing the job.', hi: 'कार्य बंद करने से पहले कृपया अंतिम संग्रहित आइटम की समीक्षा करें।', kn: 'ಕೆಲಸವನ್ನು ಮುಚ್ಚುವ ಮೊದಲು ದಯವಿಟ್ಟು ಅಂತಿಮ ಸಂಗ್ರಹಿಸಿದ ಐಟಂಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.', mr: 'काम बंद करण्यापूर्वी कृपया अंतिम गोळा केलेल्या वस्तूंचे पुनरावलोकन करा.', te: 'జాబ్‌ను మూసివేయడానికి ముందు దయచేసి చివరిగా సేకరించిన వస్తువులను సమీక్షించండి.' },
   finalSummary: { en: 'Final summary', hi: 'अंतिम सारांश', kn: 'ಅಂತಿಮ ಸಾರಾಂಶ', mr: 'अंतिम सारांश', te: 'తుది సారాంశం' },
   agentNotesLabel: { en: 'Agent notes:', hi: 'एजेंट टिप्पणियां:', kn: 'ಏಜೆಂಟ್ ಟಿಪ್ಪಣಿಗಳು:', mr: 'एजंट टिपा:', te: 'ఏజెంట్ గమనికలు:' },
-  totalWeight: { en: 'Total weight', hi: 'कुल वज़न', kn: 'ಒಟ್ಟು ತೂಕ', mr: 'एकूण वजन', te: 'మొత్తం బరువు' }
+  totalWeight: { en: 'Total weight', hi: 'कुल वज़न', kn: 'ಒಟ್ಟು ತೂಕ', mr: 'एकूण वजन', te: 'మొత్తం బరువు' },
+  totalItems: { en: 'Total items', hi: 'कुल वस्तुएं', kn: 'ಒಟ್ಟು ವಸ್ತುಗಳು', mr: 'एकूण वस्तू', te: 'మొత్తం వస్తువులు' },
 };
 
 interface LanguageContextType {

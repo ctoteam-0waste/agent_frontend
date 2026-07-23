@@ -509,21 +509,40 @@ export function JobFlowScreen({ navigation, route }: any) {
                   </View>
                 ))}
 
-                {notes ? (
+                {notes.trim() ? (
                   <>
                     <View style={[styles.divider, { marginVertical: 8 }]} />
                     <View style={{ flexDirection: 'column', gap: 4 }}>
                       <Text style={[styles.summaryLabel, { fontSize: 12 }]}>{t('agentNotesLabel')}</Text>
-                      <Text style={{ fontSize: 13, color: colors.textPrimary, fontStyle: 'italic' }}>"{notes}"</Text>
+                      <Text style={{ fontSize: 13, color: colors.textPrimary, fontStyle: 'italic' }}>"{notes.trim()}"</Text>
                     </View>
                   </>
                 ) : null}
 
                 <View style={[styles.divider, { backgroundColor: '#e2e8f0', height: 2 }]} />
-                <View style={styles.summaryRow}>
-                  <Text style={[styles.summaryLabel, { fontWeight: '800', color: colors.textPrimary }]}>{t('totalWeight')}</Text>
-                  <Text style={[styles.summaryVal, { fontSize: 16 }]}>{wasteItems.reduce((acc: any, curr: any) => acc + (parseFloat(curr.qty) || 0), 0).toFixed(2)} {t('unitKg')}</Text>
-                </View>
+                {(() => {
+                  // Piece items and kg items are different units — never sum them together
+                  const totalPieces = wasteItems.reduce((acc: number, curr: any) =>
+                    getUnit(curr.subCategory || '') === 'kg' ? acc : acc + (parseFloat(curr.qty) || 0), 0);
+                  const totalKg = wasteItems.reduce((acc: number, curr: any) =>
+                    getUnit(curr.subCategory || '') === 'kg' ? acc + (parseFloat(curr.qty) || 0) : acc, 0);
+                  return (
+                    <>
+                      {totalPieces > 0 && (
+                        <View style={styles.summaryRow}>
+                          <Text style={[styles.summaryLabel, { fontWeight: '800', color: colors.textPrimary }]}>{t('totalItems')}</Text>
+                          <Text style={[styles.summaryVal, { fontSize: 16 }]}>{totalPieces} {t('unitPiece')}</Text>
+                        </View>
+                      )}
+                      {totalKg > 0 && (
+                        <View style={styles.summaryRow}>
+                          <Text style={[styles.summaryLabel, { fontWeight: '800', color: colors.textPrimary }]}>{t('totalWeight')}</Text>
+                          <Text style={[styles.summaryVal, { fontSize: 16 }]}>{totalKg.toFixed(2)} {t('unitKg')}</Text>
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
               </View>
             </View>
           )}
@@ -602,9 +621,9 @@ const styles = StyleSheet.create({
   mapLoading: { flex: 1, backgroundColor: '#e8f5e9', alignItems: 'center', justifyContent: 'center', gap: 8 },
   mapPlaceholderText: { fontSize: 15, fontWeight: '700', color: colors.primary },
   mapPlaceholderSub: { fontSize: 12, color: colors.textMuted, fontWeight: '500' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  summaryLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
-  summaryVal: { fontSize: 13, color: colors.primary, fontWeight: '800' },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  summaryLabel: { flex: 1, fontSize: 13, color: colors.textSecondary, fontWeight: '600', lineHeight: 19 },
+  summaryVal: { fontSize: 13, color: colors.primary, fontWeight: '800', textAlign: 'right', flexShrink: 0 },
   bottomAction: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#f1f5f9', elevation: 10 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 18, borderRadius: 18 },
   actionBtnText: { color: 'white', fontSize: 16, fontWeight: '900' },
