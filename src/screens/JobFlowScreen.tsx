@@ -152,15 +152,12 @@ export function JobFlowScreen({ navigation, route }: any) {
   );
   const [notes, setNotes] = useState('');
 
-  // Init Mappls SDK
+  // Mappls native SDK v2 is licensed via the bundled OLF file (copied into
+  // android/app by the config plugin) — there is no runtime key API. The old
+  // setMapSDKKey/setRestAPIKey calls don't exist on the module and would throw,
+  // leaving the map stuck on "Initializing" forever.
   useEffect(() => {
-    mapService.getMapConfig()
-      .then(key => {
-        MapplsGL.setMapSDKKey(key);
-        MapplsGL.setRestAPIKey(key);
-        setMapReady(true);
-      })
-      .catch(() => {});
+    setMapReady(true);
   }, []);
 
   // GPS tracking + route fetch + location emit — only during step 0 (navigating to user)
@@ -394,12 +391,18 @@ export function JobFlowScreen({ navigation, route }: any) {
                     />
                     {/* User pickup pin */}
                     <MapplsGL.PointAnnotation id="user-pin" coordinate={userCoords} title="Pickup">
-                      <View style={styles.userPin}><Text style={{ fontSize: 18 }}>📦</Text></View>
+                      <View style={styles.pinWrap}>
+                        <View style={styles.userPin}><Text style={{ fontSize: 19 }}>🏠</Text></View>
+                        <View style={styles.userPinStem} />
+                      </View>
                     </MapplsGL.PointAnnotation>
                     {/* Agent live pin */}
                     {agentCoords && (
                       <MapplsGL.PointAnnotation id="agent-pin" coordinate={agentCoords} title="You">
-                        <View style={styles.agentPin}><Text style={{ fontSize: 18 }}>🛵</Text></View>
+                        <View style={styles.pinWrap}>
+                          <View style={styles.agentPin}><Text style={{ fontSize: 19 }}>🛵</Text></View>
+                          <View style={styles.agentPinStem} />
+                        </View>
                       </MapplsGL.PointAnnotation>
                     )}
                     {/* Route polyline */}
@@ -577,8 +580,11 @@ const styles = StyleSheet.create({
   body: { padding: 20, paddingBottom: 120, gap: 16 },
   stepperCard: { backgroundColor: 'white', borderRadius: 20, padding: 20, elevation: 2 },
   mapCard: { height: 220, borderRadius: 20, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  userPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#dcfce7', borderWidth: 2, borderColor: '#16a34a', alignItems: 'center', justifyContent: 'center' },
-  agentPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff', borderWidth: 2, borderColor: '#0ea5e9', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  pinWrap: { alignItems: 'center' },
+  userPin: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#16a34a', borderWidth: 3, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  userPinStem: { width: 0, height: 0, borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 11, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#fff', marginTop: -3 },
+  agentPin: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#fff', borderWidth: 3, borderColor: '#0284c7', alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  agentPinStem: { width: 0, height: 0, borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 11, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#0284c7', marginTop: -3 },
   etaBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(255,255,255,0.95)', paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center' },
   etaText: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
   stepperContainer: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
