@@ -2,10 +2,10 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Modal, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Star, Package, Award, Phone, ChevronRight, Globe, Check, X } from 'lucide-react-native';
+import { LogOut, Star, Package, Award, Phone, ChevronRight, Globe, Check, X, Wallet } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { bookingService } from '../services/bookingService';
 import { agentService } from '../services/agentService';
 import { colors } from '../theme/colors';
@@ -21,6 +21,7 @@ const LANGUAGES = [
 export function ProfileScreen() {
   const { agent, logout, isOnline, updateAgent } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const navigation = useNavigation<any>();
   const [totalPickups, setTotalPickups] = useState(agent?.totalPickups || 0);
 
   useFocusEffect(useCallback(() => {
@@ -129,6 +130,27 @@ export function ProfileScreen() {
             <View style={styles.chevronBox}><ChevronRight size={16} color={colors.textMuted} /></View>
           </TouchableOpacity>
           <InfoRow icon={<Package size={18} color="#0891b2" />} iconBg="#eff6ff" label={t('zoneLabel')} value={agent?.zone || t('notAssigned')} />
+        </View>
+
+        {/* Wallet / Redeem */}
+        <Text style={styles.sectionHeading}>Wallet</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.infoRow} onPress={() => navigation.navigate('Redeem')} activeOpacity={0.7}>
+            <View style={[styles.infoIcon, { backgroundColor: colors.coinBg }]}><Wallet size={18} color={colors.coin} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoLabel}>KarmaCoins balance</Text>
+              <Text style={[styles.infoValue, { color: colors.coin }]}>{agent?.coins || 0} coins</Text>
+            </View>
+            <View style={styles.chevronBox}><ChevronRight size={16} color={colors.textMuted} /></View>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.infoRow, { borderBottomWidth: 0 }]} onPress={() => navigation.navigate('RedeemHistory')} activeOpacity={0.7}>
+            <View style={[styles.infoIcon, { backgroundColor: '#f0fdf4' }]}><Award size={18} color={colors.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoLabel}>Redeem requests</Text>
+              <Text style={styles.infoValue}>View history</Text>
+            </View>
+            <View style={styles.chevronBox}><ChevronRight size={16} color={colors.textMuted} /></View>
+          </TouchableOpacity>
         </View>
 
         {/* App settings + Logout grouped */}
