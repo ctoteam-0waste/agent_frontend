@@ -43,6 +43,11 @@ function ActiveJobCard({ item, onResume }: any) {
             <Text style={styles.activeInfoText}>{timeSlot}</Text>
           </View>
         ) : null}
+        {typeof item.estimatedKarmaCoins === 'number' && (
+          <View style={styles.activeInfoRow}>
+            <Text style={[styles.activeInfoText, { fontWeight: '800' }]}>Est. value: {item.estimatedKarmaCoins} KC</Text>
+          </View>
+        )}
         <View style={styles.resumeBtn}>
           <PlayCircle size={16} color={colors.primary} />
           <Text style={styles.resumeBtnText}>{t('resumePickup')}</Text>
@@ -97,6 +102,11 @@ function QueueCard({ item, onAccept, onDecline }: any) {
           <Clock size={13} color={colors.textMuted} />
           <Text style={styles.metaText}>{pickupDateText} • {timeSlotText}</Text>
         </View>
+        {typeof item.estimatedKarmaCoins === 'number' && (
+          <View style={styles.metaItem}>
+            <Text style={styles.estValueText}>Est. value: {item.estimatedKarmaCoins} KC</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.tagsRow}>
@@ -315,6 +325,7 @@ const styles = StyleSheet.create({
   cardMeta: { marginBottom: 14 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+  estValueText: { fontSize: 12, color: colors.primary, fontWeight: '800' },
   tagsRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 14 },
   catTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   catTagText: { fontSize: 11, fontWeight: '700' },

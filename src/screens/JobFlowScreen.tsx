@@ -447,6 +447,13 @@ export function JobFlowScreen({ navigation, route }: any) {
                   <Clock size={13} color={colors.textMuted} />
                   <Text style={styles.infoText}>{pickupDateText} • {timeSlotText}</Text>
                 </View>
+                {typeof booking.estimatedKarmaCoins === 'number' && (
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.infoText, { color: colors.primary, fontWeight: '800' }]}>
+                      Est. value: {booking.estimatedKarmaCoins} KC
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
             {booking.specialInstruction ? (
