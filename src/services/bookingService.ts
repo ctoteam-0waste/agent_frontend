@@ -64,10 +64,12 @@ export const bookingService = {
       const response = await apiClient.patch(`/bookings/${id}/accept`);
       return response.data;
     } catch (error: any) {
+      // Keep error.response intact (callers need the status code to tell a
+      // real "already taken" 400 apart from a connectivity failure).
       if (error.response && error.response.data) {
-        throw new Error(error.response.data.message || 'Failed to accept booking');
+        error.message = error.response.data.message || 'Failed to accept booking';
       }
-      throw new Error(error.message || 'Network error accepting booking');
+      throw error;
     }
   },
 

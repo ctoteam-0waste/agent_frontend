@@ -10,6 +10,12 @@ import { bookingService } from '../services/bookingService';
 import { useLanguage } from '../context/LanguageContext';
 import { useSocket } from '../context/SocketContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { queuePendingAccept, clearPendingAccept, retryPendingAccept, resumeAllPendingAccepts } from '../utils/pendingAccepts';
+
+// Backend booking statuses (booking.model.js) that mean "an agent already
+// owns this and it isn't finished yet". There is no ACCEPTED/IN_TRANSIT
+// status on the backend — accepting a booking moves it to ASSIGNED.
+const ACTIVE_JOB_STATUSES = ['ASSIGNED', 'REACHED', 'VERIFIED', 'PICKED_UP', 'WAREHOUSE_REACHED'];
 
 const CATEGORY_COLORS: any = {
   plastic: '#3b82f6', metal: '#6366f1', 'e-waste': '#8b5cf6',
@@ -167,12 +173,19 @@ export function QueueScreen({ navigation }: any) {
         setQueue([]);
       }
 
-      // Active job (first ACCEPTED/IN_TRANSIT booking)
+      // Active job (first booking the server has already assigned to this agent)
       const jobs = agentJobsRes?.data || agentJobsRes || [];
       const active = Array.isArray(jobs)
-        ? jobs.find((j: any) => ['ACCEPTED', 'IN_TRANSIT', 'REACHED'].includes(j.status))
+        ? jobs.find((j: any) => ACTIVE_JOB_STATUSES.includes(j.status))
         : null;
       setActiveJob(active || null);
+
+      // Only ever treat a booking as "ours" once the server confirms it —
+      // a booking still pending sync stays unconfirmed until then, never shown
+      // as an active/resumable job.
+      if (active) {
+        clearPendingAccept(active._id || active.id);
+      }
 
     } catch (error: any) {
       console.warn('Queue fetch error:', error.message);
@@ -188,6 +201,13 @@ export function QueueScreen({ navigation }: any) {
   useFocusEffect(useCallback(() => {
     fetchData(true);
   }, [fetchData]));
+
+  // Resume syncing any accepts that failed to reach the server before the
+  // app was last closed. Runs once per mount — retryPendingAccept manages
+  // its own backoff loop, so re-kicking it on every focus would stack retries.
+  useEffect(() => {
+    resumeAllPendingAccepts();
+  }, []);
 
   // Every agent in the service area now sees the same available jobs, so a
   // booking someone else just accepted needs to disappear from this list
@@ -245,9 +265,15 @@ export function QueueScreen({ navigation }: any) {
         // Confirmation check itself failed too — fall through to the retry prompt.
       }
 
+      // Keep quietly retrying the accept in the background — and remember it
+      // across an app restart — so the agent doesn't have to babysit this
+      // screen for the accept to eventually land once the server wakes up.
+      queuePendingAccept(bookingId, item);
+      retryPendingAccept(bookingId);
+
       Alert.alert(
         t('serverUnreachableTitle'),
-        'Could not confirm whether this pickup was accepted. Please try again.',
+        'Could not confirm whether this pickup was accepted. We\'ll keep trying in the background — you can also retry now.',
         [
           { text: t('cancelLabel'), style: 'cancel' },
           { text: 'Retry', onPress: () => handleAcceptJob(item) }
