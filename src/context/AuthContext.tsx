@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { authService } from '../services/authService';
@@ -53,8 +53,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // component — it can't call useAuth()) can force a logout when the backend
   // reports this session is no longer valid: either a plain expired token, or
   // this device's session having been superseded by a login elsewhere.
+  //
+  // Guarded with a ref (not state) because several in-flight requests can all
+  // 401 around the same moment — e.g. QueueScreen fetches available bookings
+  // and agent jobs in parallel — and the socket can also fire connect_error
+  // repeatedly across its reconnection attempts. Without this, the user would
+  // see the same "logged out" alert stack multiple times.
+  const sessionInvalidHandledRef = useRef(false);
+  useEffect(() => {
+    if (token) sessionInvalidHandledRef.current = false;
+  }, [token]);
   useEffect(() => {
     setSessionInvalidHandler(async (message) => {
+      if (sessionInvalidHandledRef.current) return;
+      sessionInvalidHandledRef.current = true;
+
       setToken(null);
       setAgent(null);
       setIsOnline(false);
