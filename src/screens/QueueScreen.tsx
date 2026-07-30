@@ -227,12 +227,30 @@ export function QueueScreen({ navigation }: any) {
         setQueue(prev => prev.filter(q => (q._id || q.id) !== bookingId));
         return;
       }
+
+      // Network/timeout error (common on a cold Render instance: the accept
+      // can actually go through server-side before the response reaches us).
+      // Check the agent's own jobs before assuming it failed — never let the
+      // agent proceed into JobFlow on a booking that was never confirmed
+      // assigned to them, since only one agent can ever hold a given booking.
+      try {
+        const jobsRes = await bookingService.getAgentJobs();
+        const jobs = jobsRes?.data || jobsRes || [];
+        const nowMine = Array.isArray(jobs) ? jobs.find((j: any) => (j._id || j.id) === bookingId) : null;
+        if (nowMine) {
+          navigation.navigate('JobFlow', { booking: nowMine });
+          return;
+        }
+      } catch (_) {
+        // Confirmation check itself failed too — fall through to the retry prompt.
+      }
+
       Alert.alert(
         t('serverUnreachableTitle'),
-        t('serverUnreachableMsg'),
+        'Could not confirm whether this pickup was accepted. Please try again.',
         [
           { text: t('cancelLabel'), style: 'cancel' },
-          { text: t('startJob'), onPress: () => navigation.navigate('JobFlow', { booking: item }) }
+          { text: 'Retry', onPress: () => handleAcceptJob(item) }
         ]
       );
     } finally {
