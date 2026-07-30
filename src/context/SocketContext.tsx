@@ -28,8 +28,10 @@ interface SocketContextType {
   isConnected: boolean;
   incomingBooking: IncomingBooking | null;
   cancelledBookingId: string | null;
+  takenBookingId: string | null;
   dismissIncomingBooking: () => void;
   clearCancelledBooking: () => void;
+  clearTakenBooking: () => void;
   simulateIncomingBooking: (data: IncomingBooking) => void;
   emitLocationUpdate: (bookingId: string, lat: number, lng: number) => void;
 }
@@ -38,8 +40,10 @@ const SocketContext = createContext<SocketContextType>({
   isConnected: false,
   incomingBooking: null,
   cancelledBookingId: null,
+  takenBookingId: null,
   dismissIncomingBooking: () => {},
   clearCancelledBooking: () => {},
+  clearTakenBooking: () => {},
   simulateIncomingBooking: () => {},
   emitLocationUpdate: () => {},
 });
@@ -51,6 +55,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [incomingBooking, setIncomingBooking] = useState<IncomingBooking | null>(null);
   const [cancelledBookingId, setCancelledBookingId] = useState<string | null>(null);
+  const [takenBookingId, setTakenBookingId] = useState<string | null>(null);
   const { addNotification } = useNotifications();
   const { token, updateAgent, logout } = useAuth();
 
@@ -182,6 +187,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         }
         return prev;
       });
+      // Every agent in the service area can now see the same available jobs,
+      // so removing a taken booking from the browse list (not just the popup)
+      // matters a lot more than it used to.
+      setTakenBookingId(data.bookingId);
       addNotification({
         type: 'BOOKING_TAKEN',
         title: 'Pickup Taken',
@@ -261,6 +270,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     setCancelledBookingId(null);
   }, []);
 
+  const clearTakenBooking = useCallback(() => {
+    setTakenBookingId(null);
+  }, []);
+
   const simulateIncomingBooking = useCallback((data: IncomingBooking) => {
     Vibration.vibrate([0, 400, 200, 400]);
     setIncomingBooking(data);
@@ -272,7 +285,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, dismissIncomingBooking, clearCancelledBooking, simulateIncomingBooking, emitLocationUpdate }}>
+    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate }}>
       {children}
     </SocketContext.Provider>
   );

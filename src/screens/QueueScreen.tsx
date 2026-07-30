@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   StatusBar, SafeAreaView, RefreshControl, ActivityIndicator, Alert
@@ -8,6 +8,7 @@ import { Package, MapPin, Clock, ChevronRight, X, PlayCircle } from 'lucide-reac
 import { colors } from '../theme/colors';
 import { bookingService } from '../services/bookingService';
 import { useLanguage } from '../context/LanguageContext';
+import { useSocket } from '../context/SocketContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 const CATEGORY_COLORS: any = {
@@ -147,6 +148,7 @@ export function QueueScreen({ navigation }: any) {
   const [queue, setQueue] = useState<any[]>([]);
   const [activeJob, setActiveJob] = useState<any | null>(null);
   const { t } = useLanguage();
+  const { takenBookingId, clearTakenBooking } = useSocket();
 
   const fetchData = useCallback(async (showLoader = false) => {
     if (showLoader) setIsLoading(true);
@@ -187,6 +189,15 @@ export function QueueScreen({ navigation }: any) {
     fetchData(true);
   }, [fetchData]));
 
+  // Every agent in the service area now sees the same available jobs, so a
+  // booking someone else just accepted needs to disappear from this list
+  // immediately, not just wait for the next focus-triggered refetch.
+  useEffect(() => {
+    if (!takenBookingId) return;
+    setQueue(prev => prev.filter(q => (q._id || q.id) !== takenBookingId));
+    clearTakenBooking();
+  }, [takenBookingId, clearTakenBooking]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData(false);
@@ -205,6 +216,17 @@ export function QueueScreen({ navigation }: any) {
       const bookingData = response.success && response.data ? response.data : item;
       navigation.navigate('JobFlow', { booking: bookingData });
     } catch (error: any) {
+      if (error?.response?.status === 400) {
+        // Booking is genuinely gone (already accepted, or now outside the
+        // service area) — this isn't a connectivity issue, so don't offer
+        // "start job offline" for a booking this agent doesn't own.
+        Alert.alert(
+          'Job no longer available',
+          error.response.data?.message || 'Sorry, another agent already accepted this job.'
+        );
+        setQueue(prev => prev.filter(q => (q._id || q.id) !== bookingId));
+        return;
+      }
       Alert.alert(
         t('serverUnreachableTitle'),
         t('serverUnreachableMsg'),
