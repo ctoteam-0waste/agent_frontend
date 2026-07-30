@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { agentService } from '../services/agentService';
+import { setSessionInvalidHandler } from '../utils/authEvents';
 
 interface AuthState {
   token: string | null;
@@ -46,6 +47,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     loadSession();
+  }, []);
+
+  // Registered once so apiClient's response interceptor (a plain module, not a
+  // component — it can't call useAuth()) can force a logout when the backend
+  // reports this session is no longer valid: either a plain expired token, or
+  // this device's session having been superseded by a login elsewhere.
+  useEffect(() => {
+    setSessionInvalidHandler(async (message) => {
+      setToken(null);
+      setAgent(null);
+      setIsOnline(false);
+      await AsyncStorage.removeItem('agentToken');
+      await AsyncStorage.removeItem('agentData');
+      await AsyncStorage.removeItem('agentOnline');
+
+      const isSuperseded = message?.toLowerCase().includes('another device');
+      Alert.alert(
+        isSuperseded ? 'Logged out' : 'Session expired',
+        message || 'Your session has expired. Please log in again.'
+      );
+    });
   }, []);
 
   /**

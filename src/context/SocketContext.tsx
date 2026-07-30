@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/apiClient';
 import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
+import { notifySessionInvalid } from '../utils/authEvents';
 
 const SOCKET_URL = 'https://karmacoin-backend-testing.onrender.com';
 const GPS_INTERVAL_MS = 30000; // 30 seconds
@@ -57,7 +58,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [cancelledBookingId, setCancelledBookingId] = useState<string | null>(null);
   const [takenBookingId, setTakenBookingId] = useState<string | null>(null);
   const { addNotification } = useNotifications();
-  const { token, updateAgent, logout } = useAuth();
+  const { token, updateAgent } = useAuth();
 
   // ─── GPS Location Update ───────────────────────────────────────────────
   const pushLocation = useCallback(async () => {
@@ -153,14 +154,24 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       stopGpsTimer();
     });
 
-    socket.on('connect_error', (err) => {
-      console.log('[Socket] Connection error:', err.message);
+    socket.on('connect_error', (err: any) => {
+      console.log('[Socket] Connection error:', err.message, '| code:', err?.data?.code);
       setIsConnected(false);
-      if (err.message?.toLowerCase().includes('token expired') || err.message?.toLowerCase().includes('authentication failed')) {
-        console.log('[Socket] Token expired — auto logout');
+      const code = err?.data?.code;
+      const isSessionSuperseded = code === 'SESSION_SUPERSEDED';
+      const isAuthFailure = isSessionSuperseded
+        || code === 'TOKEN_EXPIRED'
+        || code === 'TOKEN_INVALID'
+        || err.message?.toLowerCase().includes('token expired')
+        || err.message?.toLowerCase().includes('authentication failed');
+      if (isAuthFailure) {
+        console.log('[Socket] Auth failure — auto logout:', code || err.message);
         socket.disconnect();
-        logout();
-        Alert.alert('Session expired', 'Your session has expired. Please log in again.');
+        notifySessionInvalid(
+          isSessionSuperseded
+            ? "You've been logged out because your account was signed in on another device."
+            : err.message
+        );
       }
     });
 
@@ -235,7 +246,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         bookingId: data.bookingId,
       });
     });
-  }, [token, startGpsTimer, stopGpsTimer, logout]);
+  }, [token, startGpsTimer, stopGpsTimer]);
 
   // ─── Disconnect ────────────────────────────────────────────────────────
   const disconnectSocket = useCallback(() => {

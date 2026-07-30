@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { notifySessionInvalid } from '../utils/authEvents';
 
 // Central base URL for the backend on Render.
 
@@ -31,14 +32,17 @@ apiClient.interceptors.request.use(
   }
 );
 
-// On 401, clear the expired token so the app redirects to login
+// On 401 from an already-authenticated request (not the login call itself —
+// wrong-password login attempts are also 401s, but those aren't a session
+// problem), hand off to AuthContext to clear the session and notify the user.
+// This covers both plain token expiry and a newer login elsewhere having
+// superseded this device's session.
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    if (error?.response?.status === 401) {
-      await AsyncStorage.removeItem('agentToken');
-      await AsyncStorage.removeItem('agentData');
-      await AsyncStorage.removeItem('agentOnline');
+  (error) => {
+    const isLoginRequest = error?.config?.url?.includes('/auth/login');
+    if (error?.response?.status === 401 && !isLoginRequest) {
+      notifySessionInvalid(error?.response?.data?.message);
     }
     return Promise.reject(error);
   }
