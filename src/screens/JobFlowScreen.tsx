@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager, Modal
+  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager, Modal, Linking
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -274,6 +274,13 @@ export function JobFlowScreen({ navigation, route }: any) {
   const addressText = typeof booking.address === 'object'
     ? (booking.address?.fullAddress || booking.address?.streetAddress || booking.address?.flatNo || 'Gurugram')
     : (booking.address || 'Gurugram');
+
+  // Two distinct contacts: the account holder (who booked) and the receiver at the
+  // pickup address (may be a different person). Receiver is missing on old bookings.
+  const accountPhone: string | undefined = booking.user?.phone || booking.userPhone;
+  const receiverName: string | undefined = typeof booking.address === 'object' ? booking.address?.receiverName : undefined;
+  const receiverPhone: string | undefined = typeof booking.address === 'object' ? booking.address?.receiverPhone : undefined;
+  const callPhone = (phone?: string) => { if (phone) Linking.openURL(`tel:${phone}`).catch(() => {}); };
   const distanceText = booking.distance || '1.5 km';
   const pickupDateText = booking.pickupDate || t('today');
   const timeSlotText = booking.timeSlot || '09:00 AM - 12:00 PM';
@@ -550,6 +557,25 @@ export function JobFlowScreen({ navigation, route }: any) {
                   <Clock size={13} color={colors.textMuted} />
                   <Text style={styles.infoText}>{pickupDateText} • {timeSlotText}</Text>
                 </View>
+
+                {/* Tap-to-call: account holder + receiver (both, if present). */}
+                {accountPhone ? (
+                  <TouchableOpacity style={styles.contactRow} onPress={() => callPhone(accountPhone)} activeOpacity={0.7}>
+                    <Phone size={13} color={colors.primary} />
+                    <Text style={styles.contactText} numberOfLines={1}>
+                      <Text style={styles.contactLabel}>Account holder: </Text>{userName} · {accountPhone}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {receiverPhone ? (
+                  <TouchableOpacity style={styles.contactRow} onPress={() => callPhone(receiverPhone)} activeOpacity={0.7}>
+                    <Phone size={13} color={colors.primary} />
+                    <Text style={styles.contactText} numberOfLines={1}>
+                      <Text style={styles.contactLabel}>Receiver: </Text>{receiverName || '—'} · {receiverPhone}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
                 {typeof booking.estimatedKarmaCoins === 'number' && (
                   <View style={styles.infoRow}>
                     <Text style={[styles.infoText, { color: colors.primary, fontWeight: '800' }]}>
@@ -794,6 +820,9 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, marginBottom: 6 },
   infoRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginBottom: 4 },
   infoText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500', flex: 1, lineHeight: 16 },
+  contactRow: { flexDirection: 'row', gap: 6, alignItems: 'center', marginTop: 4 },
+  contactText: { fontSize: 12, color: colors.primary, fontWeight: '700', flex: 1 },
+  contactLabel: { color: colors.textMuted, fontWeight: '600' },
   specialInstructionBox: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: '#fefce8', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#fde68a' },
   specialInstructionLabel: { fontSize: 11, color: '#92400e', fontWeight: '700', marginBottom: 2 },
   specialInstructionText: { fontSize: 13, color: '#78350f', fontWeight: '600', lineHeight: 18 },
