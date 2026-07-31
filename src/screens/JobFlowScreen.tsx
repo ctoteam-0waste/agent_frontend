@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager
+  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager, Modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft, MapPin, Clock, Phone,
-  CheckCircle2, ChevronRight, Navigation, FileText
+  CheckCircle2, ChevronRight, Navigation, FileText, Plus, X, Trash2
 } from 'lucide-react-native';
+import { catalogueService } from '../services/catalogueService';
 import MapplsGL from 'mappls-map-react-native';
 import polyline from '@mapbox/polyline';
 import * as Location from 'expo-location';
@@ -80,9 +81,11 @@ function getUnit(subCategory: string): 'piece' | 'kg' {
   return PIECE_ITEMS.has(subCategory) ? 'piece' : 'kg';
 }
 
-function WasteItem({ item, onUpdate, onConditionChange }: any) {
+function WasteItem({ item, onUpdate, onConditionChange, onRemove }: any) {
   const { t } = useLanguage();
-  const unit = getUnit(item.subCategory || '');
+  // Agent-added items carry their unit from the catalogue; pre-filled ones fall
+  // back to the local piece/kg map.
+  const unit = item.unit || getUnit(item.subCategory || '');
   const isWhole = unit !== 'kg'; // piece + pickup are whole numbers
   // Only condition-based items (electronics/appliances) carry a condition — those
   // are exactly the ones the booking pre-filled with one, so this is a safe signal.
@@ -123,6 +126,11 @@ function WasteItem({ item, onUpdate, onConditionChange }: any) {
           />
         </View>
         <Text style={styles.wasteUnit}>{unit === 'kg' ? t('unitKg') : t('unitPiece')}</Text>
+        {item.__added && (
+          <TouchableOpacity style={styles.removeItemBtn} onPress={onRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Trash2 size={16} color="#dc2626" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Editable condition — agent corrects Working / Not Working on-site. */}
@@ -179,6 +187,16 @@ export function JobFlowScreen({ navigation, route }: any) {
     (booking.categories || []).map((c: any) => ({ ...c, qty: '' }))
   );
   const [notes, setNotes] = useState('');
+
+  // "Add Item" picker — extra items handed over at pickup that weren't in the
+  // original booking. Catalogue is the live backend list (shared with the User app).
+  const [catalogue, setCatalogue] = useState<any[]>([]);
+  const [catLoading, setCatLoading] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [addCat, setAddCat] = useState<any>(null);   // selected category { category, subCategories }
+  const [addSub, setAddSub] = useState<any>(null);   // selected subCategory { name, unit, hasCondition, ... }
+  const [addCondition, setAddCondition] = useState('');
+  const [addQty, setAddQty] = useState('');
 
   // Mappls native SDK v2 is licensed via the bundled OLF file (copied into
   // android/app by the config plugin) — there is no runtime key API. The old
@@ -302,16 +320,19 @@ export function JobFlowScreen({ navigation, route }: any) {
           return;
         }
 
-        // Some items have a minimum accepted quantity (backend also enforces this)
-        const belowMin = itemsToVerify.find((item: any) => {
-          const min = MIN_QUANTITY[item.subCategory];
-          return min !== undefined && item.quantity < min;
+        // Some items have a minimum accepted quantity (backend also enforces this).
+        // Added items carry their catalogue minQuantity; pre-filled ones use the map.
+        const belowMin = wasteItems.find((item: any) => {
+          const qty = parseFloat(item.qty) || 0;
+          if (qty <= 0) return false;
+          const min = item.minQuantity ?? MIN_QUANTITY[item.subCategory];
+          return min !== undefined && qty < min;
         });
         if (belowMin) {
-          const min = MIN_QUANTITY[belowMin.subCategory];
+          const min = belowMin.minQuantity ?? MIN_QUANTITY[belowMin.subCategory];
           Alert.alert(
             t('weightsRequiredTitle'),
-            `${belowMin.subCategory} requires a minimum of ${min} ${getUnit(belowMin.subCategory)}.`
+            `${belowMin.subCategory} requires a minimum of ${min} ${belowMin.unit || getUnit(belowMin.subCategory)}.`
           );
           setIsLoading(false);
           return;
@@ -378,6 +399,49 @@ export function JobFlowScreen({ navigation, route }: any) {
       updated[idx] = { ...updated[idx], condition };
       return updated;
     });
+  };
+
+  const openAddItem = async () => {
+    setAddCat(null); setAddSub(null); setAddCondition(''); setAddQty('');
+    setShowAddItem(true);
+    if (catalogue.length === 0) {
+      setCatLoading(true);
+      try {
+        setCatalogue(await catalogueService.getCatalogue());
+      } catch {
+        Alert.alert('Could not load items', 'Please check your connection and try again.');
+      } finally {
+        setCatLoading(false);
+      }
+    }
+  };
+
+  const confirmAddItem = () => {
+    if (!addCat || !addSub) return;
+    if (addSub.hasCondition && !addCondition) {
+      Alert.alert('Select condition', 'Please choose Working or Not Working.');
+      return;
+    }
+    const min = addSub.minQuantity ?? 1;
+    const qtyNum = parseFloat(addQty) || 0;
+    if (qtyNum < min) {
+      Alert.alert('Quantity too low', `Minimum for ${addSub.name} is ${min} ${addSub.unit}.`);
+      return;
+    }
+    setWasteItems((prev: any[]) => [...prev, {
+      category: addCat.category,
+      subCategory: addSub.name,
+      condition: addSub.hasCondition ? addCondition : undefined,
+      qty: addQty,
+      unit: addSub.unit,
+      minQuantity: addSub.minQuantity ?? undefined,
+      __added: true, // agent-added → removable
+    }]);
+    setShowAddItem(false);
+  };
+
+  const removeItem = (idx: number) => {
+    setWasteItems((prev: any[]) => prev.filter((_, i) => i !== idx));
   };
 
   const stepActions = [t('reachedAction'), t('confirmAddItemsAction'), t('markPickupDoneAction'), t('completePickupAction')];
@@ -512,7 +576,7 @@ export function JobFlowScreen({ navigation, route }: any) {
               <Text style={styles.sectionTitle}>{t('itemsToCollect')}</Text>
               {wasteItems.map((item: any, idx: number) => (
                 currentStep === 2
-                  ? <WasteItem key={idx} item={item} onUpdate={(q: string) => updateQty(idx, q)} onConditionChange={(c: string) => updateCondition(idx, c)} />
+                  ? <WasteItem key={idx} item={item} onUpdate={(q: string) => updateQty(idx, q)} onConditionChange={(c: string) => updateCondition(idx, c)} onRemove={() => removeItem(idx)} />
                   : (
                     <View key={idx} style={styles.itemRow}>
                       <View style={styles.itemDot} />
@@ -520,6 +584,13 @@ export function JobFlowScreen({ navigation, route }: any) {
                     </View>
                   )
               ))}
+
+              {currentStep === 2 && (
+                <TouchableOpacity style={styles.addItemBtn} onPress={openAddItem} activeOpacity={0.85}>
+                  <Plus size={18} color={colors.primary} />
+                  <Text style={styles.addItemBtnText}>Add item</Text>
+                </TouchableOpacity>
+              )}
 
               {currentStep === 2 && (
                 <>
@@ -554,7 +625,7 @@ export function JobFlowScreen({ navigation, route }: any) {
                 {wasteItems.map((item: any, idx: number) => (
                   <View key={idx} style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>{item.subCategory || item.category}{item.condition ? ` · ${item.condition}` : ''} ({item.category})</Text>
-                    <Text style={styles.summaryVal}>{item.qty || '0'} {getUnit(item.subCategory || '') === 'kg' ? t('unitKg') : t('unitPiece')}</Text>
+                    <Text style={styles.summaryVal}>{item.qty || '0'} {(item.unit || getUnit(item.subCategory || '')) === 'kg' ? t('unitKg') : t('unitPiece')}</Text>
                   </View>
                 ))}
 
@@ -572,9 +643,9 @@ export function JobFlowScreen({ navigation, route }: any) {
                 {(() => {
                   // Piece items and kg items are different units — never sum them together
                   const totalPieces = wasteItems.reduce((acc: number, curr: any) =>
-                    getUnit(curr.subCategory || '') === 'kg' ? acc : acc + (parseFloat(curr.qty) || 0), 0);
+                    (curr.unit || getUnit(curr.subCategory || '')) === 'kg' ? acc : acc + (parseFloat(curr.qty) || 0), 0);
                   const totalKg = wasteItems.reduce((acc: number, curr: any) =>
-                    getUnit(curr.subCategory || '') === 'kg' ? acc + (parseFloat(curr.qty) || 0) : acc, 0);
+                    (curr.unit || getUnit(curr.subCategory || '')) === 'kg' ? acc + (parseFloat(curr.qty) || 0) : acc, 0);
                   return (
                     <>
                       {totalPieces > 0 && (
@@ -612,6 +683,78 @@ export function JobFlowScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Add Item picker — category → subCategory → condition (if any) → quantity */}
+      <Modal visible={showAddItem} transparent animationType="slide" onRequestClose={() => setShowAddItem(false)}>
+        <View style={styles.addBackdrop}>
+          <View style={styles.addSheet}>
+            <View style={styles.addHeader}>
+              <Text style={styles.addTitle}>{!addCat ? 'Select category' : !addSub ? addCat.category : addSub.name}</Text>
+              <TouchableOpacity onPress={() => setShowAddItem(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {catLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 44 }} />
+            ) : !addCat ? (
+              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                {catalogue.map((cat: any) => (
+                  <TouchableOpacity key={cat.category} style={styles.addRow} onPress={() => setAddCat(cat)} activeOpacity={0.8}>
+                    <Text style={styles.addRowText}>{cat.category}</Text>
+                    <ChevronRight size={18} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : !addSub ? (
+              <>
+                <TouchableOpacity onPress={() => setAddCat(null)} style={styles.addBack}>
+                  <ChevronLeft size={16} color={colors.primary} /><Text style={styles.addBackText}>Categories</Text>
+                </TouchableOpacity>
+                <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                  {(addCat.subCategories || []).map((sub: any) => (
+                    <TouchableOpacity key={sub.name} style={styles.addRow} onPress={() => { setAddSub(sub); setAddCondition(''); setAddQty(''); }} activeOpacity={0.8}>
+                      <Text style={styles.addRowText}>{sub.name}</Text>
+                      <Text style={styles.addRowUnit}>{sub.unit}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity onPress={() => setAddSub(null)} style={styles.addBack}>
+                  <ChevronLeft size={16} color={colors.primary} /><Text style={styles.addBackText}>{addCat.category}</Text>
+                </TouchableOpacity>
+                {addSub.hasCondition && (
+                  <View style={styles.conditionRow}>
+                    {['Working', 'Not Working'].map((c) => {
+                      const active = addCondition === c;
+                      return (
+                        <TouchableOpacity key={c} style={[styles.conditionPill, active && (c === 'Working' ? styles.conditionPillOk : styles.conditionPillBad)]} onPress={() => setAddCondition(c)} activeOpacity={0.85}>
+                          <Text style={[styles.conditionPillText, active && styles.conditionPillTextActive]}>{c}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+                <Text style={styles.addQtyLabel}>Quantity ({addSub.unit}{addSub.minQuantity ? `, min ${addSub.minQuantity}` : ''})</Text>
+                <TextInput
+                  style={styles.addQtyInput}
+                  value={addQty}
+                  onChangeText={(txt) => setAddQty(addSub.unit === 'kg' ? txt.replace(/[^0-9.]/g, '') : txt.replace(/[^0-9]/g, ''))}
+                  keyboardType={addSub.unit === 'kg' ? 'decimal-pad' : 'number-pad'}
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <TouchableOpacity style={styles.addConfirmBtn} onPress={confirmAddItem} activeOpacity={0.85}>
+                  <Plus size={18} color="white" />
+                  <Text style={styles.addConfirmText}>Add to pickup</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -670,6 +813,24 @@ const styles = StyleSheet.create({
   conditionPillBad: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
   conditionPillText: { fontSize: 12, fontWeight: '800', color: colors.textMuted },
   conditionPillTextActive: { color: 'white' },
+  removeItemBtn: { marginLeft: 10, padding: 4 },
+
+  addItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: colors.primary, borderStyle: 'dashed' },
+  addItemBtnText: { fontSize: 14, fontWeight: '800', color: colors.primary },
+
+  addBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },
+  addSheet: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32 },
+  addHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  addTitle: { fontSize: 17, fontWeight: '900', color: colors.textPrimary, flex: 1 },
+  addRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  addRowText: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  addRowUnit: { fontSize: 12, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
+  addBack: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, marginBottom: 4 },
+  addBackText: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  addQtyLabel: { fontSize: 12, fontWeight: '700', color: colors.textMuted, marginTop: 14, marginBottom: 6 },
+  addQtyInput: { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontWeight: '700', color: colors.textPrimary },
+  addConfirmBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 15, marginTop: 18 },
+  addConfirmText: { color: 'white', fontSize: 15, fontWeight: '900' },
   qtyInputContainer: { width: 64, height: 38, backgroundColor: 'white', borderRadius: 8, elevation: 1, borderWidth: 1, borderColor: '#e2e8f0', justifyContent: 'center' },
   qtyInput: { textAlign: 'center', fontSize: 15, fontWeight: '800', color: colors.primary, padding: 0 },
   wasteUnit: { fontSize: 12, color: colors.textMuted, fontWeight: '600', marginLeft: 6 },
