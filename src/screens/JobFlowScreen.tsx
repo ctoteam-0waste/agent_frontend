@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator
+  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -18,6 +18,11 @@ import { useSocket } from '../context/SocketContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+
+// The Mappls native map only exists in a real build (APK), not in Expo Go.
+// Detect whether the native view manager is registered; if not, we skip the
+// map and show a fallback instead of crashing with "View config not found".
+const MAP_SUPPORTED = !!(UIManager as any).getViewManagerConfig?.('RCTMGLMapView');
 
 function StepIndicator({ currentStep }: { currentStep: number }) {
   const { t } = useLanguage();
@@ -75,10 +80,13 @@ function getUnit(subCategory: string): 'piece' | 'kg' {
   return PIECE_ITEMS.has(subCategory) ? 'piece' : 'kg';
 }
 
-function WasteItem({ item, onUpdate }: any) {
+function WasteItem({ item, onUpdate, onConditionChange }: any) {
   const { t } = useLanguage();
   const unit = getUnit(item.subCategory || '');
   const isWhole = unit !== 'kg'; // piece + pickup are whole numbers
+  // Only condition-based items (electronics/appliances) carry a condition — those
+  // are exactly the ones the booking pre-filled with one, so this is a safe signal.
+  const hasCondition = item.condition != null && item.condition !== '';
 
   const handleTextChange = (text: string) => {
     if (isWhole) {
@@ -98,23 +106,43 @@ function WasteItem({ item, onUpdate }: any) {
   };
 
   return (
-    <View style={styles.wasteRow}>
-      <View style={styles.wasteInfo}>
-        <Text style={styles.wasteName}>{item.subCategory || item.category}</Text>
-        <Text style={styles.wasteCat}>{item.category}</Text>
-        {item.condition ? <Text style={styles.wasteCondition}>{item.condition}</Text> : null}
+    <View style={styles.wasteRowWrap}>
+      <View style={styles.wasteRow}>
+        <View style={styles.wasteInfo}>
+          <Text style={styles.wasteName}>{item.subCategory || item.category}</Text>
+          <Text style={styles.wasteCat}>{item.category}</Text>
+        </View>
+        <View style={styles.qtyInputContainer}>
+          <TextInput
+            style={styles.qtyInput}
+            value={String(item.qty)}
+            onChangeText={handleTextChange}
+            keyboardType={isWhole ? 'number-pad' : 'decimal-pad'}
+            placeholder={isWhole ? '0' : '0.0'}
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
+        <Text style={styles.wasteUnit}>{unit === 'kg' ? t('unitKg') : t('unitPiece')}</Text>
       </View>
-      <View style={styles.qtyInputContainer}>
-        <TextInput
-          style={styles.qtyInput}
-          value={String(item.qty)}
-          onChangeText={handleTextChange}
-          keyboardType={isWhole ? 'number-pad' : 'decimal-pad'}
-          placeholder={isWhole ? '0' : '0.0'}
-          placeholderTextColor={colors.textMuted}
-        />
-      </View>
-      <Text style={styles.wasteUnit}>{unit === 'kg' ? t('unitKg') : t('unitPiece')}</Text>
+
+      {/* Editable condition — agent corrects Working / Not Working on-site. */}
+      {hasCondition && (
+        <View style={styles.conditionRow}>
+          {['Working', 'Not Working'].map((c) => {
+            const active = item.condition === c;
+            return (
+              <TouchableOpacity
+                key={c}
+                style={[styles.conditionPill, active && (c === 'Working' ? styles.conditionPillOk : styles.conditionPillBad)]}
+                onPress={() => onConditionChange?.(c)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.conditionPillText, active && styles.conditionPillTextActive]}>{c}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -157,7 +185,8 @@ export function JobFlowScreen({ navigation, route }: any) {
   // setMapSDKKey/setRestAPIKey calls don't exist on the module and would throw,
   // leaving the map stuck on "Initializing" forever.
   useEffect(() => {
-    setMapReady(true);
+    // Only mark ready when the native map component actually exists (real build).
+    setMapReady(MAP_SUPPORTED);
   }, []);
 
   // GPS tracking + route fetch + location emit — only during step 0 (navigating to user)
@@ -341,6 +370,16 @@ export function JobFlowScreen({ navigation, route }: any) {
     });
   };
 
+  // Agent can correct the condition on-site (user said Working, it's actually Not
+  // Working — very different rate). Backend recomputes coins from whatever we submit.
+  const updateCondition = (idx: number, condition: string) => {
+    setWasteItems((prev: any[]) => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], condition };
+      return updated;
+    });
+  };
+
   const stepActions = [t('reachedAction'), t('confirmAddItemsAction'), t('markPickupDoneAction'), t('completePickupAction')];
   const stepColors = [colors.primary, colors.warning, '#0891b2', '#7c3aed'];
 
@@ -473,7 +512,7 @@ export function JobFlowScreen({ navigation, route }: any) {
               <Text style={styles.sectionTitle}>{t('itemsToCollect')}</Text>
               {wasteItems.map((item: any, idx: number) => (
                 currentStep === 2
-                  ? <WasteItem key={idx} item={item} onUpdate={(q: string) => updateQty(idx, q)} />
+                  ? <WasteItem key={idx} item={item} onUpdate={(q: string) => updateQty(idx, q)} onConditionChange={(c: string) => updateCondition(idx, c)} />
                   : (
                     <View key={idx} style={styles.itemRow}>
                       <View style={styles.itemDot} />
@@ -620,11 +659,17 @@ const styles = StyleSheet.create({
   itemDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
   itemText: { fontSize: 14, color: colors.textPrimary, fontWeight: '600' },
   itemCat: { color: colors.textMuted, fontWeight: '500' },
-  wasteRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, backgroundColor: colors.surface, borderRadius: 12, padding: 12 },
+  wasteRowWrap: { marginBottom: 12, backgroundColor: colors.surface, borderRadius: 12, padding: 12 },
+  wasteRow: { flexDirection: 'row', alignItems: 'center' },
   wasteInfo: { flex: 1 },
   wasteName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   wasteCat: { fontSize: 11, color: colors.textMuted, fontWeight: '500', marginTop: 2 },
-  wasteCondition: { fontSize: 11, color: colors.primary, fontWeight: '700', marginTop: 2 },
+  conditionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  conditionPill: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: 'white', alignItems: 'center' },
+  conditionPillOk: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  conditionPillBad: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  conditionPillText: { fontSize: 12, fontWeight: '800', color: colors.textMuted },
+  conditionPillTextActive: { color: 'white' },
   qtyInputContainer: { width: 64, height: 38, backgroundColor: 'white', borderRadius: 8, elevation: 1, borderWidth: 1, borderColor: '#e2e8f0', justifyContent: 'center' },
   qtyInput: { textAlign: 'center', fontSize: 15, fontWeight: '800', color: colors.primary, padding: 0 },
   wasteUnit: { fontSize: 12, color: colors.textMuted, fontWeight: '600', marginLeft: 6 },
