@@ -58,7 +58,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [cancelledBookingId, setCancelledBookingId] = useState<string | null>(null);
   const [takenBookingId, setTakenBookingId] = useState<string | null>(null);
   const { addNotification } = useNotifications();
-  const { token, updateAgent } = useAuth();
+  const { token, agent, updateAgent } = useAuth();
+
+  // Always-fresh agent id for socket handlers (registered once, so a plain closure
+  // over `agent` would go stale). Used to ignore our OWN BOOKING_TAKEN echo.
+  const agentIdRef = useRef<string | null>(agent?.id ?? null);
+  useEffect(() => { agentIdRef.current = agent?.id ?? null; }, [agent?.id]);
 
   // ─── GPS Location Update ───────────────────────────────────────────────
   const pushLocation = useCallback(async () => {
@@ -189,11 +194,19 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     // ── Another agent accepted → dismiss popup ──
-    socket.on('BOOKING_TAKEN', (data: { bookingId: string; message: string }) => {
+    socket.on('BOOKING_TAKEN', (data: { bookingId: string; message?: string; acceptedByAgentId?: string; agentId?: string; acceptedBy?: string }) => {
       console.log('[Socket] BOOKING_TAKEN:', data.bookingId);
+
+      // The server broadcasts BOOKING_TAKEN to every nearby agent — INCLUDING the
+      // one who just accepted. That agent must NOT be told their own pickup was
+      // "taken by another agent". Detect our own echo and stay silent for it (we
+      // still drop it from the browse list, since it's now our active job).
+      const acceptorId = data.acceptedByAgentId || data.agentId || data.acceptedBy || null;
+      const takenByMe = !!acceptorId && !!agentIdRef.current && acceptorId === agentIdRef.current;
+
       setIncomingBooking((prev) => {
         if (prev?.bookingId === data.bookingId) {
-          Alert.alert('Job taken', 'This pickup was just accepted by another agent.', [{ text: 'OK' }]);
+          if (!takenByMe) Alert.alert('Job taken', 'This pickup was just accepted by another agent.', [{ text: 'OK' }]);
           return null;
         }
         return prev;
@@ -202,12 +215,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       // so removing a taken booking from the browse list (not just the popup)
       // matters a lot more than it used to.
       setTakenBookingId(data.bookingId);
-      addNotification({
-        type: 'BOOKING_TAKEN',
-        title: 'Pickup Taken',
-        message: 'Another agent accepted this pickup request.',
-        bookingId: data.bookingId,
-      });
+      if (!takenByMe) {
+        addNotification({
+          type: 'BOOKING_TAKEN',
+          title: 'Pickup Taken',
+          message: 'Another agent accepted this pickup request.',
+          bookingId: data.bookingId,
+        });
+      }
     });
 
     // ── New rating received from user ──
