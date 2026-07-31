@@ -4,6 +4,8 @@ import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { agentService } from '../services/agentService';
 import { setSessionInvalidHandler } from '../utils/authEvents';
+import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener } from '../utils/notifications';
+import { navigationRef } from '../navigation/navRef';
 
 interface AuthState {
   token: string | null;
@@ -39,6 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setToken(storedToken);
           setAgent(JSON.parse(storedAgent));
           setIsOnline(storedOnline === 'true');
+          // Existing session on app launch — (re)register the push token so this
+          // agent keeps receiving pushes (and to backfill agents who never had one).
+          registerDeviceToken();
         }
       } catch (error) {
         console.error('Failed to load session from storage:', error);
@@ -63,6 +68,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (token) sessionInvalidHandledRef.current = false;
   }, [token]);
+
+  // Push wiring (mounted once): re-send the FCM token whenever it rotates, and on a
+  // notification tap bring the agent to their home so the (focus-refetched)
+  // available/active job lists reflect what they tapped.
+  useEffect(() => {
+    const rotationSub = addTokenRotationListener();
+    const tapSub = addNotificationTapListener(() => {
+      if (navigationRef.isReady()) navigationRef.navigate('Main');
+    });
+    return () => { rotationSub.remove(); tapSub.remove(); };
+  }, []);
   useEffect(() => {
     setSessionInvalidHandler(async (message) => {
       if (sessionInvalidHandledRef.current) return;
@@ -118,6 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem('agentData', JSON.stringify(agentData));
         await AsyncStorage.setItem('agentOnline', 'true');
 
+        // Register the FCM device token now that the agent JWT is stored — this is
+        // what lets the agent receive pushes while backgrounded/killed.
+        registerDeviceToken();
+
         // Tell backend agent is available so NEW_BOOKING_AVAILABLE events are emitted
         try {
           await agentService.toggleAvailability(true);
@@ -166,6 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Logs out the user and clears all local storage.
    */
   const logout = async () => {
+    // Unregister the push token FIRST — the DELETE request needs the still-stored
+    // agent JWT for auth. Otherwise this device keeps getting the agent's pushes.
+    await removeDeviceToken();
     setToken(null);
     setAgent(null);
     setIsOnline(false);

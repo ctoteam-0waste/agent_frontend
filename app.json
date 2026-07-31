@@ -18,10 +18,12 @@
     "android": {
       "package": "com.karmaverse.agent",
       "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": ["POST_NOTIFICATIONS"],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -35,7 +37,8 @@
     },
     "owner": "cinsin",
     "plugins": [
-      "./plugins/withMapplsMaven.js"
+      "./plugins/withMapplsMaven.js",
+      "expo-notifications"
     ]
   }
 }

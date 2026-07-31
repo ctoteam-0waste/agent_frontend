@@ -9,6 +9,7 @@ import { RedeemScreen } from '../screens/RedeemScreen';
 import { RedeemHistoryScreen } from '../screens/RedeemHistoryScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { colors } from '../theme/colors';
+import { navigationRef } from './navRef';
 
 const Stack = createStackNavigator();
 
@@ -24,7 +25,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!token ? (
           <Stack.Screen name="Login" component={LoginScreen} />
