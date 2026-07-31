@@ -6,7 +6,7 @@
 // in Expo Go / before the packages are installed (push just no-ops there). Real FCM
 // tokens only exist in a dev/production build (APK), never in Expo Go.
 import { Platform } from 'react-native';
-import apiClient, { BASE_URL } from '../api/apiClient';
+import apiClient from '../api/apiClient';
 
 let Notifications: any = null;
 let Device: any = null;
@@ -20,11 +20,9 @@ try {
 // Expo Go issues sandbox tokens the backend's FCM sender rejects — skip entirely.
 const isExpoGo = Constants?.appOwnership === 'expo';
 
-// Backend guide: POST/DELETE /api/notifications/device-token (NOT under /v1).
-// BASE_URL is ".../api/v1", so drop the version segment for the notification route.
-// TODO: if the backend actually serves this under /api/v1, change one line here.
-const NOTIF_ROOT = BASE_URL.replace(/\/v1\/?$/, '');
-const DEVICE_TOKEN_URL = `${NOTIF_ROOT}/notifications/device-token`;
+// Backend endpoint: POST/DELETE /api/v1/notifications/device-token. apiClient's
+// baseURL is already ".../api/v1", so this relative path resolves correctly.
+const DEVICE_TOKEN_PATH = '/notifications/device-token';
 
 // Foreground display config — show a heads-up + sound when a push arrives while the
 // app is open (Android does NOT auto-show a tray notification in the foreground).
@@ -66,7 +64,7 @@ export async function registerDeviceToken(): Promise<void> {
   try {
     const token = await getFcmToken();
     if (!token) return;
-    await apiClient.post(DEVICE_TOKEN_URL, { token, platform: 'ANDROID' });
+    await apiClient.post(DEVICE_TOKEN_PATH, { token, platform: 'ANDROID' });
   } catch (e) {
     console.warn('[push] device-token registration failed', e);
   }
@@ -79,7 +77,7 @@ export async function removeDeviceToken(): Promise<void> {
   try {
     const tokenData = await Notifications.getDevicePushTokenAsync();
     if (tokenData?.data) {
-      await apiClient.delete(DEVICE_TOKEN_URL, { data: { token: tokenData.data } });
+      await apiClient.delete(DEVICE_TOKEN_PATH, { data: { token: tokenData.data } });
     }
   } catch (e) {
     console.warn('[push] device-token removal failed', e);
@@ -90,7 +88,7 @@ export async function removeDeviceToken(): Promise<void> {
 export function addTokenRotationListener(): { remove: () => void } {
   if (!Notifications?.addPushTokenListener) return { remove: () => {} };
   return Notifications.addPushTokenListener(({ data }: { data: string }) => {
-    apiClient.post(DEVICE_TOKEN_URL, { token: data, platform: 'ANDROID' }).catch(() => {});
+    apiClient.post(DEVICE_TOKEN_PATH, { token: data, platform: 'ANDROID' }).catch(() => {});
   });
 }
 
