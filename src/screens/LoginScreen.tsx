@@ -1,13 +1,12 @@
 ﻿import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  KeyboardAvoidingView, Platform, ScrollView, StatusBar, Alert, ActivityIndicator, Linking
+  KeyboardAvoidingView, Platform, ScrollView, StatusBar, Alert, ActivityIndicator, Linking, Image
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Phone, Lock, Eye, EyeOff, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
-import { KarmaCoin } from '../components/shared/KarmaCoin';
 
 // TODO: replace with the real supervisor/support WhatsApp number (with country code, no + or spaces)
 const SUPPORT_WHATSAPP_NUMBER = '910000000000';
@@ -71,8 +70,8 @@ export function LoginScreen() {
       <StatusBar barStyle="light-content" backgroundColor={colors.primaryDeep} />
       <LinearGradient colors={[colors.primaryDeep, colors.primaryDark, colors.primary]} style={styles.topSection}>
         <View style={styles.logoArea}>
-          <KarmaCoin size={72} glow />
-          <Text style={styles.appName}>KarmaVer$e</Text>
+          <Image source={require('../../assets/logo-icon.png')} style={styles.logoImg} resizeMode="contain" />
+          <Text style={styles.appName}>KarmaVerse</Text>
           <Text style={styles.appTagline}>Agent partner app</Text>
         </View>
       </LinearGradient>
@@ -152,6 +151,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.card },
   topSection: { height: 280, justifyContent: 'flex-end', paddingBottom: 40 },
   logoArea: { alignItems: 'center', gap: 10 },
+  logoImg: { width: 76, height: 76 },
   appName: { fontSize: 28, fontWeight: '900', color: 'white', letterSpacing: 0.5 },
   appTagline: { fontSize: 13, color: 'rgba(255,255,255,0.65)', fontWeight: '600', letterSpacing: 1 },
   formSheet: { flex: 1, backgroundColor: colors.card, borderTopLeftRadius: 32, borderTopRightRadius: 32, marginTop: -24 },
