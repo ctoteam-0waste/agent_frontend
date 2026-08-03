@@ -13,6 +13,10 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+
+# Firebase config — kept out of git (matches user app); place locally for EAS build
+google-services.json
+GoogleService-Info.plist
 *.p8
 *.p12
 *.key
