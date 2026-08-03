@@ -35,6 +35,8 @@ interface SocketContextType {
   clearTakenBooking: () => void;
   simulateIncomingBooking: (data: IncomingBooking) => void;
   emitLocationUpdate: (bookingId: string, lat: number, lng: number) => void;
+  markBookingDead: (bookingId: string) => void;
+  isBookingDead: (bookingId: string) => boolean;
 }
 
 const SocketContext = createContext<SocketContextType>({
@@ -47,6 +49,8 @@ const SocketContext = createContext<SocketContextType>({
   clearTakenBooking: () => {},
   simulateIncomingBooking: () => {},
   emitLocationUpdate: () => {},
+  markBookingDead: () => {},
+  isBookingDead: () => false,
 });
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
@@ -69,6 +73,16 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   // over `agent` would go stale). Used to ignore our OWN BOOKING_TAKEN echo.
   const agentIdRef = useRef<string | null>(agent?.id ?? null);
   useEffect(() => { agentIdRef.current = agent?.id ?? null; }, [agent?.id]);
+
+  // Bookings that are done for this agent — expired, declined, taken by someone
+  // else, or cancelled. Once dead, a booking must never reappear (bug #10), even
+  // if the server re-broadcasts NEW_BOOKING_AVAILABLE or getAvailableBookings
+  // still returns it briefly. Both the popup queue and the browse list filter it.
+  const deadBookingIdsRef = useRef<Set<string>>(new Set());
+  const markBookingDead = useCallback((bookingId: string) => {
+    if (bookingId) deadBookingIdsRef.current.add(bookingId);
+  }, []);
+  const isBookingDead = useCallback((bookingId: string) => deadBookingIdsRef.current.has(bookingId), []);
 
   // ─── GPS Location Update ───────────────────────────────────────────────
   const pushLocation = useCallback(async () => {
@@ -189,6 +203,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     // ── New booking incoming ──
     socket.on('NEW_BOOKING_AVAILABLE', (data: IncomingBooking) => {
       console.log('[Socket] ✅ NEW_BOOKING_AVAILABLE received:', data.bookingId);
+      // Never resurrect a request this agent already finished with (expired /
+      // declined / taken / cancelled) — the server sometimes re-broadcasts it.
+      if (deadBookingIdsRef.current.has(data.bookingId)) {
+        console.log('[Socket] Ignoring re-broadcast of dead booking:', data.bookingId);
+        return;
+      }
       Vibration.vibrate([0, 400, 200, 400]);
       // Append (don't replace) so a second request doesn't wipe the first, and
       // dedupe in case the server re-broadcasts the same booking.
@@ -211,6 +231,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       // still drop it from the browse list, since it's now our active job).
       const acceptorId = data.acceptedByAgentId || data.agentId || data.acceptedBy || null;
       const takenByMe = !!acceptorId && !!agentIdRef.current && acceptorId === agentIdRef.current;
+
+      // Taken by someone else → dead, must never reappear. (If I took it, it's my
+      // active job now, not a dead browse-list entry, so don't blacklist it.)
+      if (!takenByMe) deadBookingIdsRef.current.add(data.bookingId);
 
       setIncomingQueue((prev) => {
         // Only alert if the taken booking is the one currently on screen (the head)
@@ -257,6 +281,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     // ── Booking cancelled by user ──
     socket.on('BOOKING_CANCELLED', (data: { bookingId: string; message: string }) => {
       setCancelledBookingId(data.bookingId);
+      deadBookingIdsRef.current.add(data.bookingId);
       // Drop this booking from the incoming queue wherever it is (shown or queued).
       setIncomingQueue((prev) => prev.filter((b) => b.bookingId !== data.bookingId));
       addNotification({
@@ -317,7 +342,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate }}>
+    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate, markBookingDead, isBookingDead }}>
       {children}
     </SocketContext.Provider>
   );

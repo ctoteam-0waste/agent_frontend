@@ -12,7 +12,7 @@ import { bookingService } from '../services/bookingService';
 import { colors } from '../theme/colors';
 
 export function IncomingBookingOverlay() {
-  const { incomingBooking, dismissIncomingBooking } = useSocket();
+  const { incomingBooking, dismissIncomingBooking, markBookingDead } = useSocket();
   const { isOnline } = useAuth();
   const { addNotification } = useNotifications();
   const navigation = useNavigation<any>();
@@ -105,6 +105,9 @@ export function IncomingBookingOverlay() {
 
   const handleDeclineIncoming = async () => {
     if (!incomingBooking) return;
+    // Expired or explicitly declined — blacklist so it can never reappear (bug #10),
+    // even if the server re-broadcasts it or still lists it as available for a bit.
+    markBookingDead(incomingBooking.bookingId);
     try {
       if (incomingBooking.bookingId !== 'test-123') {
         await bookingService.declineBooking(incomingBooking.bookingId);

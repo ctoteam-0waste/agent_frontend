@@ -154,7 +154,7 @@ export function QueueScreen({ navigation }: any) {
   const [queue, setQueue] = useState<any[]>([]);
   const [activeJobs, setActiveJobs] = useState<any[]>([]);
   const { t } = useLanguage();
-  const { takenBookingId, clearTakenBooking } = useSocket();
+  const { takenBookingId, clearTakenBooking, isBookingDead } = useSocket();
 
   const fetchData = useCallback(async (showLoader = false) => {
     if (showLoader) setIsLoading(true);
@@ -164,14 +164,12 @@ export function QueueScreen({ navigation }: any) {
         bookingService.getAgentJobs('active').catch(() => null),
       ]);
 
-      // Available bookings
-      if (availableRes?.success && Array.isArray(availableRes.data)) {
-        setQueue(availableRes.data);
-      } else if (Array.isArray(availableRes)) {
-        setQueue(availableRes);
-      } else {
-        setQueue([]);
-      }
+      // Available bookings — drop any this agent already finished with (expired /
+      // declined / taken / cancelled), so a stale server list can't resurrect them.
+      const rawAvailable = availableRes?.success && Array.isArray(availableRes.data)
+        ? availableRes.data
+        : Array.isArray(availableRes) ? availableRes : [];
+      setQueue(rawAvailable.filter((b: any) => !isBookingDead(b._id || b.id)));
 
       // Every booking the server has already assigned to this agent. The
       // backend's ?view=active filter already restricts this, but we re-filter
