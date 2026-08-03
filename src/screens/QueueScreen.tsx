@@ -195,9 +195,15 @@ export function QueueScreen({ navigation }: any) {
     }
   }, []);
 
-  // Refresh every time screen comes into focus
+  // Refresh on focus, then keep the list self-healing on a short poll while it's
+  // open. The BOOKING_TAKEN socket event already drops a taken booking instantly,
+  // but if that event is ever missed (socket briefly dropped, agent switching
+  // screens) this guarantees other agents still see it gone within ~15s instead
+  // of only on the next manual refresh (bug #8).
   useFocusEffect(useCallback(() => {
     fetchData(true);
+    const poll = setInterval(() => fetchData(false), 15000);
+    return () => clearInterval(poll);
   }, [fetchData]));
 
   // Resume syncing any accepts that failed to reach the server before the
@@ -302,7 +308,11 @@ export function QueueScreen({ navigation }: any) {
     }
   };
 
-  const totalCount = queue.length + activeJobs.length;
+  // Filter at render too, not just on fetch — the instant a BOOKING_TAKEN marks a
+  // booking dead (and bumps takenBookingId, forcing this re-render), it drops out
+  // here even if the one-shot takenBookingId removal raced with a second take.
+  const visibleQueue = queue.filter((q: any) => !isBookingDead(q._id || q.id));
+  const totalCount = visibleQueue.length + activeJobs.length;
 
   return (
     <View style={styles.root}>
@@ -327,7 +337,7 @@ export function QueueScreen({ navigation }: any) {
         </View>
       ) : (
         <FlatList
-          data={queue}
+          data={visibleQueue}
           keyExtractor={item => item._id || item.id || Math.random().toString()}
           renderItem={({ item }) => (
             <QueueCard item={item} onAccept={handleAcceptJob} onDecline={handleDeclineJob} />
@@ -345,7 +355,7 @@ export function QueueScreen({ navigation }: any) {
                     <ActiveJobCard item={job} onResume={handleResumeJob} />
                   </View>
                 ))}
-                {queue.length > 0 && <Text style={styles.sectionLabel}>{t('availablePickups')}</Text>}
+                {visibleQueue.length > 0 && <Text style={styles.sectionLabel}>{t('availablePickups')}</Text>}
               </View>
             ) : null
           }
