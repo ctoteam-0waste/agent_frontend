@@ -159,7 +159,7 @@ const translations: Translations = {
   // Queue Screen
   activeJobBadge: { en: 'ACTIVE JOB', hi: 'सक्रिय काम', kn: 'ಸಕ್ರಿಯ ಕೆಲಸ', mr: 'सक्रिय काम', te: 'యాక్టివ్ జాబ్' },
   resumePickup: { en: 'Resume pickup', hi: 'पिकअप जारी रखें', kn: 'ಪಿಕಪ್ ಮುಂದುವರಿಸಿ', mr: 'पिकअप सुरू ठेवा', te: 'పికప్‌ను కొనసాగించండి' },
-  yourActiveJob: { en: 'YOUR ACTIVE JOB', hi: 'आपका सक्रिय काम', kn: 'ನಿಮ್ಮ ಸಕ್ರಿಯ ಕೆಲಸ', mr: 'तुमचे सक्रिय काम', te: 'మీ యాక్టివ్ జాబ్' },
+  yourActiveJob: { en: 'YOUR ACCEPTED PICKUPS', hi: 'आपके स्वीकृत पिकअप', kn: 'ನೀವು ಸ್ವೀಕರಿಸಿದ ಪಿಕಪ್‌ಗಳು', mr: 'तुम्ही स्वीकारलेले पिकअप', te: 'మీరు అంగీకరించిన పికప్‌లు' },
   availablePickups: { en: 'AVAILABLE PICKUPS', hi: 'उपलब्ध पिकअप', kn: 'ಲಭ್ಯವಿರುವ ಪಿಕಪ್‌ಗಳು', mr: 'उपलब्ध पिकअप', te: 'అందుబాటులో ఉన్న పికప్‌లు' },
   cancelLabel: { en: 'Cancel', hi: 'रद्द करें', kn: 'ರದ್ದುಗೊಳಿಸಿ', mr: 'रद्द करा', te: 'రద్దు చేయండి' },
   moreItems: { en: '+{n} more', hi: '+{n} और', kn: '+{n} ಹೆಚ್ಚು', mr: '+{n} अधिक', te: '+{n} మరిన్ని' },
