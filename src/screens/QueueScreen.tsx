@@ -230,8 +230,17 @@ export function QueueScreen({ navigation }: any) {
     setIsLoading(true);
     try {
       const response = await bookingService.acceptBooking(bookingId);
+      // The server can answer 200 but still refuse the booking (already taken) via
+      // success:false — that's NOT a win, so stop here instead of showing the
+      // success toast and walking into JobFlow. (=== false, not just falsy, so a
+      // legacy response without a success field still counts as accepted.)
+      if (response?.success === false) {
+        Alert.alert('Job no longer available', response?.message || 'Sorry, another agent already accepted this job.');
+        setQueue(prev => prev.filter(q => (q._id || q.id) !== bookingId));
+        return;
+      }
       Alert.alert(`${t('pickupAcceptedTitle')} 🎉`, t('pickupAcceptedMsg'));
-      const bookingData = response.success && response.data ? response.data : item;
+      const bookingData = response.data || item;
       navigation.navigate('JobFlow', { booking: bookingData });
     } catch (error: any) {
       if (error?.response?.status === 400) {

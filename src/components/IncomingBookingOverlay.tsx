@@ -87,6 +87,14 @@ export function IncomingBookingOverlay() {
         return;
       }
       const response = await bookingService.acceptBooking(incomingBooking.bookingId);
+      // 200 but success:false means the booking was already taken — stop the flow,
+      // don't navigate into JobFlow. Blacklist it so it can't reappear (bug #10/#11).
+      if (response?.success === false) {
+        markBookingDead(incomingBooking.bookingId);
+        dismissIncomingBooking();
+        Alert.alert('Job no longer available', response?.message || 'This pickup was just accepted by another agent.');
+        return;
+      }
       dismissIncomingBooking();
       const bookingData = response?.data || { _id: incomingBooking.bookingId };
       addNotification({
@@ -97,6 +105,13 @@ export function IncomingBookingOverlay() {
       });
       navigation.navigate('JobFlow', { booking: bookingData });
     } catch (err: any) {
+      if (err?.response?.status === 400) {
+        // Genuinely gone (already accepted by another agent) — stop, don't retry.
+        markBookingDead(incomingBooking.bookingId);
+        dismissIncomingBooking();
+        Alert.alert('Job no longer available', err.response.data?.message || 'This pickup was just accepted by another agent.');
+        return;
+      }
       Alert.alert('Error', err.message || 'Could not accept booking. Try again.');
     } finally {
       setIsAcceptingJob(false);
