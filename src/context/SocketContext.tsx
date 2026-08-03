@@ -14,6 +14,7 @@ import apiClient from '../api/apiClient';
 import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
 import { notifySessionInvalid } from '../utils/authEvents';
+import { navigationRef } from '../navigation/navRef';
 
 const SOCKET_URL = 'https://karmacoin-backend-testing.onrender.com';
 const GPS_INTERVAL_MS = 30000; // 30 seconds
@@ -207,6 +208,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       // declined / taken / cancelled) — the server sometimes re-broadcasts it.
       if (deadBookingIdsRef.current.has(data.bookingId)) {
         console.log('[Socket] Ignoring re-broadcast of dead booking:', data.bookingId);
+        return;
+      }
+      // Don't hijack an active job. If the agent is inside JobFlow (accepting /
+      // verifying / completing a pickup), skip the interrupting popup — the request
+      // still lands in the notification bell and shows up in the browse list on the
+      // next focus, i.e. shown separately without breaking the current job (bug #12).
+      const currentRoute = navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
+      if (currentRoute === 'JobFlow') {
+        console.log('[Socket] In JobFlow — suppressing popup for', data.bookingId);
+        addNotification({
+          type: 'NEW_BOOKING',
+          title: 'New Pickup Request 🚛',
+          message: data.message || 'A new pickup request is available near you.',
+          bookingId: data.bookingId,
+        });
         return;
       }
       Vibration.vibrate([0, 400, 200, 400]);

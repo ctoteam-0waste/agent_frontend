@@ -9,6 +9,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { bookingService } from '../services/bookingService';
+import { navigationRef } from '../navigation/navRef';
 import { colors } from '../theme/colors';
 
 export function IncomingBookingOverlay() {
@@ -19,6 +20,18 @@ export function IncomingBookingOverlay() {
   const [isAcceptingJob, setIsAcceptingJob] = useState(false);
   const [timeLeft, setTimeLeft] = useState(120);
   const soundRef = useRef<Audio.Sound | null>(null);
+
+  // Never let the popup cover an active job. Track the current route and suppress
+  // the overlay while the agent is inside JobFlow, even for an already-queued
+  // request that surfaces after they enter a job (bug #12).
+  const [currentRoute, setCurrentRoute] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const sync = () => { if (navigationRef.isReady()) setCurrentRoute(navigationRef.getCurrentRoute()?.name); };
+    sync();
+    const unsub = navigationRef.isReady() ? navigationRef.addListener('state', sync) : undefined;
+    return () => { unsub?.(); };
+  }, []);
+  const suppressed = currentRoute === 'JobFlow';
 
   useEffect(() => {
     let soundInstance: Audio.Sound | null = null;
@@ -41,7 +54,8 @@ export function IncomingBookingOverlay() {
       }
     };
 
-    if (!incomingBooking) {
+    // No booking, or suppressed because the agent is mid-job — don't ring/countdown.
+    if (!incomingBooking || suppressed) {
       setTimeLeft(120);
       return;
     }
@@ -67,7 +81,7 @@ export function IncomingBookingOverlay() {
       }
       soundRef.current = null;
     };
-  }, [incomingBooking]);
+  }, [incomingBooking, suppressed]);
 
   const handleAcceptIncoming = async () => {
     if (!incomingBooking) return;
@@ -140,7 +154,7 @@ export function IncomingBookingOverlay() {
   return (
     <Modal
       transparent
-      visible={!!incomingBooking}
+      visible={!!incomingBooking && !suppressed}
       animationType="slide"
       statusBarTranslucent
       // Hardware Back just closes the popup — it must NOT decline the booking.
