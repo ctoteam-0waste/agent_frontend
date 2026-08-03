@@ -125,7 +125,11 @@ export function IncomingBookingOverlay() {
       visible={!!incomingBooking}
       animationType="slide"
       statusBarTranslucent
-      onRequestClose={handleDeclineIncoming}
+      // Hardware Back just closes the popup — it must NOT decline the booking.
+      // The request stays available (in the queue / acceptable) until the agent
+      // explicitly taps Cancel or the timer expires. Declining here was making a
+      // still-active request vanish the moment the agent pressed Back.
+      onRequestClose={dismissIncomingBooking}
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
