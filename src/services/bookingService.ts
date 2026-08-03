@@ -24,12 +24,13 @@ export const bookingService = {
   },
 
   /**
-   * Fetch jobs currently assigned to the active agent.
-   * GET /bookings/agent-jobs
+   * Fetch jobs for the active agent.
+   * GET /bookings/agent-jobs[?view=active|completed|cancelled]
+   * Omitting `view` returns every booking (any status) — used by History.
    */
-  getAgentJobs: async () => {
+  getAgentJobs: async (view?: 'active' | 'completed' | 'cancelled') => {
     try {
-      const response = await apiClient.get('/bookings/agent-jobs');
+      const response = await apiClient.get('/bookings/agent-jobs', view ? { params: { view } } : undefined);
       return response.data;
     } catch (error: any) {
       if (error.response && error.response.data) {

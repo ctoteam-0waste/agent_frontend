@@ -152,7 +152,7 @@ export function QueueScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [queue, setQueue] = useState<any[]>([]);
-  const [activeJob, setActiveJob] = useState<any | null>(null);
+  const [activeJobs, setActiveJobs] = useState<any[]>([]);
   const { t } = useLanguage();
   const { takenBookingId, clearTakenBooking } = useSocket();
 
@@ -161,7 +161,7 @@ export function QueueScreen({ navigation }: any) {
     try {
       const [availableRes, agentJobsRes] = await Promise.all([
         bookingService.getAvailableBookings().catch(() => null),
-        bookingService.getAgentJobs().catch(() => null),
+        bookingService.getAgentJobs('active').catch(() => null),
       ]);
 
       // Available bookings
@@ -173,24 +173,24 @@ export function QueueScreen({ navigation }: any) {
         setQueue([]);
       }
 
-      // Active job (first booking the server has already assigned to this agent)
+      // Every booking the server has already assigned to this agent. The
+      // backend's ?view=active filter already restricts this, but we re-filter
+      // defensively so a slightly different status set can't leak in.
       const jobs = agentJobsRes?.data || agentJobsRes || [];
-      const active = Array.isArray(jobs)
-        ? jobs.find((j: any) => ACTIVE_JOB_STATUSES.includes(j.status))
-        : null;
-      setActiveJob(active || null);
+      const actives = Array.isArray(jobs)
+        ? jobs.filter((j: any) => ACTIVE_JOB_STATUSES.includes(j.status))
+        : [];
+      setActiveJobs(actives);
 
       // Only ever treat a booking as "ours" once the server confirms it —
       // a booking still pending sync stays unconfirmed until then, never shown
       // as an active/resumable job.
-      if (active) {
-        clearPendingAccept(active._id || active.id);
-      }
+      actives.forEach((a: any) => clearPendingAccept(a._id || a.id));
 
     } catch (error: any) {
       console.warn('Queue fetch error:', error.message);
       setQueue([]);
-      setActiveJob(null);
+      setActiveJobs([]);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -295,7 +295,7 @@ export function QueueScreen({ navigation }: any) {
     }
   };
 
-  const totalCount = queue.length + (activeJob ? 1 : 0);
+  const totalCount = queue.length + activeJobs.length;
 
   return (
     <View style={styles.root}>
@@ -330,16 +330,20 @@ export function QueueScreen({ navigation }: any) {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           ListHeaderComponent={
-            activeJob ? (
+            activeJobs.length > 0 ? (
               <View>
                 <Text style={styles.sectionLabel}>{t('yourActiveJob')}</Text>
-                <ActiveJobCard item={activeJob} onResume={handleResumeJob} />
+                {activeJobs.map((job) => (
+                  <View key={job._id || job.id} style={{ marginBottom: 14 }}>
+                    <ActiveJobCard item={job} onResume={handleResumeJob} />
+                  </View>
+                ))}
                 {queue.length > 0 && <Text style={styles.sectionLabel}>{t('availablePickups')}</Text>}
               </View>
             ) : null
           }
           ListEmptyComponent={
-            !activeJob ? (
+            activeJobs.length === 0 ? (
               <View style={styles.empty}>
                 <Package size={60} color="#cbd5e1" />
                 <Text style={styles.emptyTitle}>{t('noPickups')}</Text>
