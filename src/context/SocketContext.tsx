@@ -167,6 +167,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       const isAuthFailure = isSessionSuperseded
         || code === 'TOKEN_EXPIRED'
         || code === 'TOKEN_INVALID'
+        || code === 'TOKEN_BLACKLISTED'
         || err.message?.toLowerCase().includes('token expired')
         || err.message?.toLowerCase().includes('authentication failed');
       if (isAuthFailure) {
