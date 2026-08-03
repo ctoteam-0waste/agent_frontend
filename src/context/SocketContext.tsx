@@ -54,7 +54,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const gpsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [incomingBooking, setIncomingBooking] = useState<IncomingBooking | null>(null);
+  // A queue of incoming requests, not a single slot. Two bookings arriving within
+  // seconds used to overwrite each other (only the latest survived); now each
+  // lines up and is handled independently (bug #7). The overlay always shows the
+  // head of the queue.
+  const [incomingQueue, setIncomingQueue] = useState<IncomingBooking[]>([]);
+  const incomingBooking = incomingQueue[0] ?? null;
   const [cancelledBookingId, setCancelledBookingId] = useState<string | null>(null);
   const [takenBookingId, setTakenBookingId] = useState<string | null>(null);
   const { addNotification } = useNotifications();
@@ -185,7 +190,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     socket.on('NEW_BOOKING_AVAILABLE', (data: IncomingBooking) => {
       console.log('[Socket] ✅ NEW_BOOKING_AVAILABLE received:', data.bookingId);
       Vibration.vibrate([0, 400, 200, 400]);
-      setIncomingBooking(data);
+      // Append (don't replace) so a second request doesn't wipe the first, and
+      // dedupe in case the server re-broadcasts the same booking.
+      setIncomingQueue((prev) => prev.some((b) => b.bookingId === data.bookingId) ? prev : [...prev, data]);
       addNotification({
         type: 'NEW_BOOKING',
         title: 'New Pickup Request 🚛',
@@ -205,12 +212,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       const acceptorId = data.acceptedByAgentId || data.agentId || data.acceptedBy || null;
       const takenByMe = !!acceptorId && !!agentIdRef.current && acceptorId === agentIdRef.current;
 
-      setIncomingBooking((prev) => {
-        if (prev?.bookingId === data.bookingId) {
-          if (!takenByMe) Alert.alert('Job taken', 'This pickup was just accepted by another agent.', [{ text: 'OK' }]);
-          return null;
-        }
-        return prev;
+      setIncomingQueue((prev) => {
+        // Only alert if the taken booking is the one currently on screen (the head)
+        // — a queued-but-not-yet-shown one just drops silently.
+        const wasShowing = prev[0]?.bookingId === data.bookingId;
+        if (wasShowing && !takenByMe) Alert.alert('Job taken', 'This pickup was just accepted by another agent.', [{ text: 'OK' }]);
+        return prev.filter((b) => b.bookingId !== data.bookingId);
       });
       // Every agent in the service area can now see the same available jobs,
       // so removing a taken booking from the browse list (not just the popup)
@@ -250,11 +257,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     // ── Booking cancelled by user ──
     socket.on('BOOKING_CANCELLED', (data: { bookingId: string; message: string }) => {
       setCancelledBookingId(data.bookingId);
-      // Also dismiss popup if this booking was showing
-      setIncomingBooking(prev => {
-        if (prev?.bookingId === data.bookingId) return null;
-        return prev;
-      });
+      // Drop this booking from the incoming queue wherever it is (shown or queued).
+      setIncomingQueue((prev) => prev.filter((b) => b.bookingId !== data.bookingId));
       addNotification({
         type: 'BOOKING_CANCELLED',
         title: 'Booking Cancelled ❌',
@@ -290,7 +294,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const dismissIncomingBooking = useCallback(() => {
-    setIncomingBooking(null);
+    // Drop only the head — the next queued request (if any) becomes visible.
+    setIncomingQueue((prev) => prev.slice(1));
   }, []);
 
   const clearCancelledBooking = useCallback(() => {
@@ -303,7 +308,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
   const simulateIncomingBooking = useCallback((data: IncomingBooking) => {
     Vibration.vibrate([0, 400, 200, 400]);
-    setIncomingBooking(data);
+    setIncomingQueue((prev) => prev.some((b) => b.bookingId === data.bookingId) ? prev : [...prev, data]);
   }, []);
 
   const emitLocationUpdate = useCallback((bookingId: string, lat: number, lng: number) => {
