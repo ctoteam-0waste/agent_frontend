@@ -7,7 +7,7 @@ import React, {
   useCallback,
 } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Alert, Vibration } from 'react-native';
+import { Alert, Vibration, AppState } from 'react-native';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/apiClient';
@@ -156,8 +156,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     const socket = io(SOCKET_URL, {
       auth: { token: activeToken },
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 3000,
+      reconnectionAttempts: Infinity, // keep retrying — a phone that backgrounds for
+      reconnectionDelay: 3000,         // a while must not permanently give up the socket
     });
 
     socketRef.current = socket;
@@ -333,6 +333,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       disconnectTimerRef.current = setTimeout(() => disconnectSocket(), 300);
     };
   }, [token]);
+
+  // The OS suspends network while the app is backgrounded/phone locked, so the
+  // socket can silently die (or exhaust its reconnect attempts) even though the app
+  // is still "open". When the app returns to the foreground, re-establish the socket
+  // if it's not connected — connectSocket() creates a fresh instance and re-attaches
+  // every listener (incl. NEW_BOOKING_AVAILABLE), so live pickups resume immediately.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && token && !socketRef.current?.connected) {
+        console.log('[Socket] App foregrounded with dead socket — reconnecting');
+        connectSocket();
+      }
+    });
+    return () => sub.remove();
+  }, [token, connectSocket]);
 
   const dismissIncomingBooking = useCallback(() => {
     // Drop only the head — the next queued request (if any) becomes visible.
