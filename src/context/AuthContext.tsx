@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { agentService } from '../services/agentService';
 import { setSessionInvalidHandler } from '../utils/authEvents';
-import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener, getInitialNotificationData } from '../utils/notifications';
+import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener, getInitialNotificationData, ensureNotificationChannel } from '../utils/notifications';
 import { navigationRef } from '../navigation/navRef';
 
 interface AuthState {
@@ -95,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }, 250);
     };
 
+    ensureNotificationChannel(); // create the high-importance channel early, every launch
     const rotationSub = addTokenRotationListener();
     const tapSub = addNotificationTapListener(routeFromTap);
     // Killed/terminated: if the app was cold-launched by tapping a notification.

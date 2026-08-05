@@ -36,18 +36,30 @@ if (Notifications) {
   });
 }
 
+// The high-importance channel a push must land on for a reliable heads-up + tap on
+// every OEM. Some skins (MIUI/ColorOS/…) demote notifications to a low-importance
+// fallback channel if the target channel doesn't already exist, which is one cause
+// of the device-specific "tap does nothing / no heads-up" inconsistency. Create it
+// early and unconditionally (backend must target channel_id "default").
+export async function ensureNotificationChannel(): Promise<void> {
+  if (!Notifications?.setNotificationChannelAsync || Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'Pickup alerts',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#15803d',
+    });
+  } catch (_) { /* channel setup best-effort */ }
+}
+
 async function getFcmToken(): Promise<string | null> {
   if (!Notifications || !Device) return null;
   if (!Device.isDevice) return null;           // emulator without Play Services
   if (Platform.OS !== 'android') return null;  // backend validator only accepts ANDROID
   if (isExpoGo) return null;                    // Expo Go tokens rejected — needs APK
 
-  await Notifications.setNotificationChannelAsync('default', {
-    name: 'Pickup alerts',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#15803d',
-  });
+  await ensureNotificationChannel();
 
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
