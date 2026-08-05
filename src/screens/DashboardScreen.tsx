@@ -76,8 +76,17 @@ export function DashboardScreen({ navigation }: any) {
       .catch(() => {});
   }, []));
 
-  // isFirstTime from backend OR if agent has no completed pickups yet
-  const isNewAgentView = (agent?.isFirstTime ?? true) && realPickups === 0;
+  // An agent is only shown the new-agent onboarding view when the backend explicitly
+  // flags them first-time AND they have no activity on any signal. Previously this
+  // defaulted isFirstTime to `true` when the field was missing, so an experienced
+  // agent whose profile hadn't loaded isFirstTime (or whose realPickups momentarily
+  // computed to 0) was wrongly treated as new — which hid the whole Today's Summary
+  // even though data existed (KV-045). Any recorded activity now keeps it visible.
+  const hasActivity = realPickups > 0
+    || (agent?.totalPickups || 0) > 0
+    || (thisMonthPickups || 0) > 0
+    || (todayPickups || 0) > 0;
+  const isNewAgentView = agent?.isFirstTime === true && !hasActivity;
   const firstName = agent?.name?.split(' ')[0] || 'Agent';
 
   const getGreetingKey = () => {
