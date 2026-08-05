@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { agentService } from '../services/agentService';
 import { setSessionInvalidHandler } from '../utils/authEvents';
-import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener } from '../utils/notifications';
+import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener, getInitialNotificationData } from '../utils/notifications';
 import { navigationRef } from '../navigation/navRef';
 
 interface AuthState {
@@ -69,14 +69,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (token) sessionInvalidHandledRef.current = false;
   }, [token]);
 
-  // Push wiring (mounted once): re-send the FCM token whenever it rotates, and on a
-  // notification tap bring the agent to their home so the (focus-refetched)
-  // available/active job lists reflect what they tapped.
+  // Push wiring (mounted once): re-send the FCM token whenever it rotates, and route
+  // the agent when they TAP a push. Tap handling has to cover all three app states:
+  //  - foreground: handled elsewhere (in-app socket/overlay), not here
+  //  - background: addNotificationTapListener fires immediately
+  //  - killed/cold-start: getInitialNotificationData() returns the launch tap
+  // A new-pickup tap lands on the Queue tab (which focus-refetches available jobs so
+  // the pickup shows); any other event just opens the app home. On a cold launch the
+  // navigator may not be mounted yet, so we wait for it to be ready before navigating.
   useEffect(() => {
+    const routeFromTap = (data: any) => {
+      if (!data) return;
+      const goToQueue = data.event === 'NEW_BOOKING_AVAILABLE';
+      const navigate = () => {
+        if (!navigationRef.isReady()) return false;
+        if (goToQueue) navigationRef.navigate('Main', { screen: 'Queue' });
+        else navigationRef.navigate('Main');
+        return true;
+      };
+      if (navigate()) return;
+      // Navigator not ready (cold launch) — poll briefly until it mounts.
+      let tries = 0;
+      const iv = setInterval(() => {
+        if (navigate() || ++tries > 40) clearInterval(iv); // give up after ~10s
+      }, 250);
+    };
+
     const rotationSub = addTokenRotationListener();
-    const tapSub = addNotificationTapListener(() => {
-      if (navigationRef.isReady()) navigationRef.navigate('Main');
-    });
+    const tapSub = addNotificationTapListener(routeFromTap);
+    // Killed/terminated: if the app was cold-launched by tapping a notification.
+    getInitialNotificationData().then(routeFromTap).catch(() => {});
     return () => { rotationSub.remove(); tapSub.remove(); };
   }, []);
   useEffect(() => {
