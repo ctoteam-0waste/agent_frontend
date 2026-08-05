@@ -38,6 +38,7 @@ interface SocketContextType {
   emitLocationUpdate: (bookingId: string, lat: number, lng: number) => void;
   markBookingDead: (bookingId: string) => void;
   isBookingDead: (bookingId: string) => boolean;
+  suppressBookingPopup: (bookingId: string) => void;
 }
 
 const SocketContext = createContext<SocketContextType>({
@@ -52,6 +53,7 @@ const SocketContext = createContext<SocketContextType>({
   emitLocationUpdate: () => {},
   markBookingDead: () => {},
   isBookingDead: () => false,
+  suppressBookingPopup: () => {},
 });
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
@@ -75,15 +77,24 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const agentIdRef = useRef<string | null>(agent?.id ?? null);
   useEffect(() => { agentIdRef.current = agent?.id ?? null; }, [agent?.id]);
 
-  // Bookings that are done for this agent — expired, declined, taken by someone
-  // else, or cancelled. Once dead, a booking must never reappear (bug #10), even
-  // if the server re-broadcasts NEW_BOOKING_AVAILABLE or getAvailableBookings
-  // still returns it briefly. Both the popup queue and the browse list filter it.
+  // Genuinely gone for this agent — taken by someone else, cancelled by the user, or
+  // the server refused an accept. These must never reappear anywhere: filtered from
+  // both the popup and the browse list (bug #10).
   const deadBookingIdsRef = useRef<Set<string>>(new Set());
   const markBookingDead = useCallback((bookingId: string) => {
     if (bookingId) deadBookingIdsRef.current.add(bookingId);
   }, []);
   const isBookingDead = useCallback((bookingId: string) => deadBookingIdsRef.current.has(bookingId), []);
+
+  // Only the POPUP is suppressed — the booking is still available server-side, the
+  // agent just let the popup lapse (timer ran out) or dismissed it. It must NOT pop
+  // again as an interrupting overlay (bug #10), but it MUST still show in the browse
+  // Pickup Queue so the backend's ~2-min re-offer surfaces it there (bug #5). So the
+  // browse-list filter deliberately ignores this set.
+  const popupBlockedIdsRef = useRef<Set<string>>(new Set());
+  const suppressBookingPopup = useCallback((bookingId: string) => {
+    if (bookingId) popupBlockedIdsRef.current.add(bookingId);
+  }, []);
 
   // ─── GPS Location Update ───────────────────────────────────────────────
   const pushLocation = useCallback(async () => {
@@ -204,10 +215,11 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     // ── New booking incoming ──
     socket.on('NEW_BOOKING_AVAILABLE', (data: IncomingBooking) => {
       console.log('[Socket] ✅ NEW_BOOKING_AVAILABLE received:', data.bookingId);
-      // Never resurrect a request this agent already finished with (expired /
-      // declined / taken / cancelled) — the server sometimes re-broadcasts it.
-      if (deadBookingIdsRef.current.has(data.bookingId)) {
-        console.log('[Socket] Ignoring re-broadcast of dead booking:', data.bookingId);
+      // Don't re-pop the overlay for a booking that's gone (taken/cancelled) or whose
+      // popup the agent already let lapse. A lapsed one still belongs in the browse
+      // Pickup Queue (that filter ignores popupBlocked), just not as an interruption.
+      if (deadBookingIdsRef.current.has(data.bookingId) || popupBlockedIdsRef.current.has(data.bookingId)) {
+        console.log('[Socket] Suppressing popup for known booking:', data.bookingId);
         return;
       }
       // Don't hijack an active job. If the agent is inside JobFlow (accepting /
@@ -373,7 +385,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate, markBookingDead, isBookingDead }}>
+    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate, markBookingDead, isBookingDead, suppressBookingPopup }}>
       {children}
     </SocketContext.Provider>
   );

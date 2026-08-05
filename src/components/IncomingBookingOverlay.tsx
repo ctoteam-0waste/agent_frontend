@@ -13,7 +13,7 @@ import { navigationRef } from '../navigation/navRef';
 import { colors } from '../theme/colors';
 
 export function IncomingBookingOverlay() {
-  const { incomingBooking, dismissIncomingBooking, markBookingDead } = useSocket();
+  const { incomingBooking, dismissIncomingBooking, markBookingDead, suppressBookingPopup } = useSocket();
   const { isOnline } = useAuth();
   const { addNotification } = useNotifications();
   const navigation = useNavigation<any>();
@@ -134,9 +134,10 @@ export function IncomingBookingOverlay() {
 
   const handleDeclineIncoming = async () => {
     if (!incomingBooking) return;
-    // Expired or explicitly declined — blacklist so it can never reappear (bug #10),
-    // even if the server re-broadcasts it or still lists it as available for a bit.
-    markBookingDead(incomingBooking.bookingId);
+    // Timer lapsed or the agent dismissed the popup — only suppress the POPUP so it
+    // can't re-interrupt (bug #10). The booking is still available server-side, so it
+    // must stay in the browse Pickup Queue and resurface on the ~2-min re-offer (bug #5).
+    suppressBookingPopup(incomingBooking.bookingId);
     try {
       if (incomingBooking.bookingId !== 'test-123') {
         await bookingService.declineBooking(incomingBooking.bookingId);
