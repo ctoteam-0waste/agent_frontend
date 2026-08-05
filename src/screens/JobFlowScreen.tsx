@@ -309,17 +309,21 @@ export function JobFlowScreen({ navigation, route }: any) {
       } else if (currentStep === 2) {
         // Step 2 -> Step 3: Validate, Verify weights & transition to Pickup Done
         const itemsToVerify = wasteItems
+          // Keep every item the agent actually entered a value for — INCLUDING an
+          // explicit "0" (item not found / not verified), which the backend accepts
+          // (KV-032). Only untouched rows (empty string) are dropped, so a blank
+          // pre-filled item isn't silently sent as 0.
+          .filter((item: any) => String(item.qty ?? '').trim() !== '')
           .map((item: any) => {
             const entry: any = {
               category: item.category,
               subCategory: item.subCategory || item.category,
-              quantity: parseFloat(item.qty) || 0,
+              quantity: parseFloat(item.qty) || 0, // "0" -> 0
             };
             // Backend requires condition for Working / Not Working items — pass it through
             if (item.condition) entry.condition = item.condition;
             return entry;
-          })
-          .filter((item: any) => item.quantity > 0);
+          });
 
         if (itemsToVerify.length === 0) {
           Alert.alert(t('weightsRequiredTitle'), t('weightsRequiredMsg'));
