@@ -40,13 +40,17 @@ function StatCard({ label, value, sub, accent, locked = false, lockedLabel }: an
 export function DashboardScreen({ navigation }: any) {
   const { agent, isOnline, toggleOnlineStatus, updateAgent } = useAuth();
   const { t } = useLanguage();
-  const { notifications, unreadCount, markAllRead, clearAll } = useNotifications();
+  const { notifications, unreadCount, markAllRead, markRead, clearAll, refresh: refreshNotifs, loadMore: loadMoreNotifs, hasMore: hasMoreNotifs, loadingNotifs } = useNotifications();
   const [queueCount, setQueueCount] = useState(0);
   const [realPickups, setRealPickups] = useState(agent?.totalPickups || 0);
   const [todayPickups, setTodayPickups] = useState<number | null>(null);
   const [thisMonthPickups, setThisMonthPickups] = useState<number | null>(null);
 
   useFocusEffect(useCallback(() => {
+    // Reconcile the bell badge with server history on every focus (app load / foreground),
+    // so events missed while the app was closed surface here.
+    refreshNotifs();
+
     bookingService.getAvailableBookings()
       .then(res => {
         const data = res?.data || res || [];
@@ -152,7 +156,7 @@ export function DashboardScreen({ navigation }: any) {
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.bellBtn} onPress={() => { markAllRead(); openNotifModal(); }}>
+              <TouchableOpacity style={styles.bellBtn} onPress={() => { openNotifModal(); refreshNotifs(); }}>
                 <Bell size={20} color="white" />
                 {unreadCount > 0 && (
                   <View style={[styles.bellDot, { backgroundColor: colors.warning }]}>
@@ -297,6 +301,11 @@ export function DashboardScreen({ navigation }: any) {
                 <Text style={styles.notifModalSub}>{notifications.length > 0 ? t('notificationsCount', notifications.length) : t('latestUpdates')}</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                {unreadCount > 0 && (
+                  <TouchableOpacity onPress={() => { markAllRead(); }} style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#dcfce7', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#16a34a' }}>Mark all read</Text>
+                  </TouchableOpacity>
+                )}
                 {notifications.length > 0 && (
                   <TouchableOpacity onPress={() => { clearAll(); }} style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fee2e2', borderRadius: 10 }}>
                     <Text style={{ fontSize: 11, fontWeight: '700', color: '#ef4444' }}>{t('clearAll')}</Text>
@@ -329,14 +338,15 @@ export function DashboardScreen({ navigation }: any) {
                     return t('dayAgo', Math.floor(diff / 1440));
                   })();
                   return (
-                    <NotifRow
-                      key={n.id}
-                      icon={icon} bg={bg}
-                      title={n.title}
-                      desc={n.message}
-                      time={timeAgo}
-                      unread={!n.read}
-                    />
+                    <TouchableOpacity key={n.id} activeOpacity={0.7} onPress={() => markRead(n.id)}>
+                      <NotifRow
+                        icon={icon} bg={bg}
+                        title={n.title}
+                        desc={n.message}
+                        time={timeAgo}
+                        unread={!n.read}
+                      />
+                    </TouchableOpacity>
                   );
                 })
               ) : (
@@ -345,6 +355,16 @@ export function DashboardScreen({ navigation }: any) {
                   <Text style={{ color: '#94a3b8', marginTop: 12, fontWeight: '600' }}>{t('noNotificationsYet')}</Text>
                   <Text style={{ color: '#cbd5e1', fontSize: 12, marginTop: 4 }}>{t('acceptPickupsActivity')}</Text>
                 </View>
+              )}
+
+              {hasMoreNotifs && notifications.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => loadMoreNotifs()}
+                  disabled={loadingNotifs}
+                  style={{ alignSelf: 'center', marginTop: 8, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#e2e8f0', borderRadius: 12 }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>{loadingNotifs ? 'Loading…' : 'Load older'}</Text>
+                </TouchableOpacity>
               )}
             </ScrollView>
           </Animated.View>

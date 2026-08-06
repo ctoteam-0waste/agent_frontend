@@ -306,6 +306,17 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       updateAgent({ currentStreak: data.currentStreak, longestStreak: data.longestStreak });
     });
 
+    // ── Self-confirmation after THIS agent accepts a booking (bell/history only) ──
+    socket.on('BOOKING_ACCEPTED_CONFIRMATION', (data: { bookingId?: string; message?: string }) => {
+      console.log('[Socket] BOOKING_ACCEPTED_CONFIRMATION:', data?.bookingId);
+      addNotification({
+        type: 'ACCEPTED',
+        title: 'Pickup accepted ✅',
+        message: data?.message || 'You accepted a pickup.',
+        bookingId: data?.bookingId,
+      });
+    });
+
     // ── Booking cancelled by user ──
     socket.on('BOOKING_CANCELLED', (data: { bookingId: string; message: string }) => {
       setCancelledBookingId(data.bookingId);
