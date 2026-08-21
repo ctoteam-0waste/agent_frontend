@@ -113,6 +113,20 @@ export function addNotificationTapListener(cb: (data: any) => void): { remove: (
   });
 }
 
+// Report that the agent tapped/opened a push. Fire-and-forget — the backend only
+// knows a push was "sent" until the app reports "opened" on tap. A failed call
+// (offline, timeout) only affects an analytics number, never the agent's flow, so
+// swallow errors and never block navigation. Idempotent server-side. apiClient's
+// baseURL already ends in /api/v1, so this relative path resolves correctly.
+export async function markNotificationOpened(notificationId?: string): Promise<void> {
+  if (!notificationId) return;
+  try {
+    await apiClient.patch(`/notifications/${notificationId}/opened`);
+  } catch (_) {
+    // intentionally ignored — see above
+  }
+}
+
 // If the app was cold-started by tapping a notification, return its data payload.
 export async function getInitialNotificationData(): Promise<any | null> {
   if (!Notifications?.getLastNotificationResponseAsync) return null;

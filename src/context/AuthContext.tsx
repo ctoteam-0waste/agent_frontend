@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { agentService } from '../services/agentService';
 import { setSessionInvalidHandler } from '../utils/authEvents';
-import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener, getInitialNotificationData, ensureNotificationChannel } from '../utils/notifications';
+import { registerDeviceToken, removeDeviceToken, addTokenRotationListener, addNotificationTapListener, getInitialNotificationData, ensureNotificationChannel, markNotificationOpened } from '../utils/notifications';
 import { navigationRef } from '../navigation/navRef';
 
 interface AuthState {
@@ -80,6 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const routeFromTap = (data: any) => {
       if (!data) return;
+      // Report the open for every tapped push, before any navigation. Fire-and-forget.
+      if (data.notificationId) markNotificationOpened(data.notificationId);
       const goToQueue = data.event === 'NEW_BOOKING_AVAILABLE';
       const navigate = () => {
         if (!navigationRef.isReady()) return false;
