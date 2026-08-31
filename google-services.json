@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "152765471990",
+    "project_id": "karmacoin-e6fa7",
+    "storage_bucket": "karmacoin-e6fa7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:152765471990:android:8b5b7667bec33649cae0d7",
+        "android_client_info": {
+          "package_name": "com.karmacredits.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "152765471990-4g23up0gau0bclvkm3gk67fa1mpbe5r8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBHFdkEPxZpLMCbOTTsEUDxwAlMeUpJ8Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "152765471990-4g23up0gau0bclvkm3gk67fa1mpbe5r8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:152765471990:android:fe08c51bcae5b383cae0d7",
+        "android_client_info": {
+          "package_name": "com.karmaverse.agent"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "152765471990-4g23up0gau0bclvkm3gk67fa1mpbe5r8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBHFdkEPxZpLMCbOTTsEUDxwAlMeUpJ8Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "152765471990-4g23up0gau0bclvkm3gk67fa1mpbe5r8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
