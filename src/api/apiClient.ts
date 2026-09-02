@@ -4,7 +4,7 @@ import { notifySessionInvalid } from '../utils/authEvents';
 
 // Central base URL for the backend on Render.
 
-export const BASE_URL = 'https://karmacoin-backend-testing.onrender.com/api/v1';
+export const BASE_URL = 'https://api.karmaverse.earth/api/v1';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,

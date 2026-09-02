@@ -16,7 +16,7 @@ import { useAuth } from './AuthContext';
 import { notifySessionInvalid } from '../utils/authEvents';
 import { navigationRef } from '../navigation/navRef';
 
-const SOCKET_URL = 'https://karmacoin-backend-testing.onrender.com';
+const SOCKET_URL = 'https://api.karmaverse.earth';
 const GPS_INTERVAL_MS = 30000; // 30 seconds
 
 interface IncomingBooking {
