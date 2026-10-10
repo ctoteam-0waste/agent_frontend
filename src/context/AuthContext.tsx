@@ -132,12 +132,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await authService.login(phone, password);
       if (response?.success && response?.data) {
-        const newToken = response.data?.token;
-        const rawUser = response.data?.user;
+        const d = response.data;
+        const newToken = d?.token ?? d?.accessToken;
+        // The agent object has come back under different keys depending on how the
+        // account was created (data.user, data.agent, or data itself). Accept any of
+        // them, and fail cleanly instead of crashing on `_id` when none is present —
+        // that `undefined._id` access was crashing the app right after a "successful"
+        // login for accounts whose response shape differed.
+        const rawUser = d?.user || d?.agent || (d?._id ? d : null);
+        if (!rawUser || !rawUser._id) {
+          console.log('[Auth] login ok but no user object in response:', JSON.stringify(d));
+          Alert.alert('Login failed', 'The server sent an unexpected response. Please try again, or contact support if it continues.');
+          return;
+        }
+        const idStr = String(rawUser._id);
 
         const agentData = {
           id: rawUser._id,
-          agentId: `AGT-${rawUser._id.substring(rawUser._id.length - 4).toUpperCase()}`,
+          agentId: `AGT-${idStr.slice(-4).toUpperCase()}`,
           name: rawUser.name,
           email: rawUser.email,
           phone: rawUser.phone,
