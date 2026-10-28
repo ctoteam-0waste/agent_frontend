@@ -75,7 +75,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [cancelledBookingId, setCancelledBookingId] = useState<string | null>(null);
   const [takenBookingId, setTakenBookingId] = useState<string | null>(null);
   const { addNotification } = useNotifications();
-  const { token, agent, updateAgent } = useAuth();
+  const { token, agent, updateAgent, isOnline } = useAuth();
 
   // Always-fresh agent id for socket handlers (registered once, so a plain closure
   // over `agent` would go stale). Used to ignore our OWN BOOKING_TAKEN echo.
@@ -137,6 +137,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       gpsTimerRef.current = null;
     }
   }, []);
+
+  // Push location the instant the agent goes online, so the backend's go-online
+  // order-matching runs against a real position — not [0,0] — right away, even if
+  // the socket-connect GPS timer hasn't fired yet (that was why online agents got
+  // no orders: their location stayed [0,0]).
+  useEffect(() => {
+    if (isOnline) pushLocation();
+  }, [isOnline, pushLocation]);
 
   // ─── Socket Connect ────────────────────────────────────────────────────
   // token is in deps to avoid stale closure — always uses the latest token value
