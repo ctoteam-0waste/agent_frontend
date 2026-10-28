@@ -12,6 +12,7 @@ import { TrainingModal } from '../components/TrainingModal';
 import { bookingService } from '../services/bookingService';
 import { agentService } from '../services/agentService';
 import { useNotifications } from '../context/NotificationContext';
+import { useSocket } from '../context/SocketContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
@@ -41,6 +42,7 @@ export function DashboardScreen({ navigation }: any) {
   const { agent, isOnline, toggleOnlineStatus, updateAgent } = useAuth();
   const { t } = useLanguage();
   const { notifications, unreadCount, markAllRead, markRead, clearAll, refresh: refreshNotifs, loadMore: loadMoreNotifs, hasMore: hasMoreNotifs, loadingNotifs } = useNotifications();
+  const { isConnected, gpsStatus } = useSocket();
   const [queueCount, setQueueCount] = useState(0);
   const [realPickups, setRealPickups] = useState(agent?.totalPickups || 0);
   const [todayPickups, setTodayPickups] = useState<number | null>(null);
@@ -178,6 +180,13 @@ export function DashboardScreen({ navigation }: any) {
               </View>
             </View>
             <Switch value={isOnline} onValueChange={handleToggle} thumbColor={isOnline ? colors.online : '#f4f3f4'} trackColor={{ false: '#d1d5db', true: colors.online + '50' }} />
+          </View>
+
+          {/* Live-location debug indicator — temporary, to diagnose why the backend
+              isn't receiving the agent's GPS. Remove once the issue is resolved. */}
+          <View style={styles.debugCard}>
+            <Text style={styles.debugText}>Socket: {isConnected ? 'connected ✓' : 'disconnected ✗'}</Text>
+            <Text style={styles.debugText}>{gpsStatus}</Text>
           </View>
 
         </SafeAreaView>
@@ -404,6 +413,8 @@ const styles = StyleSheet.create({
   bellDot: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
   statusCard: { borderRadius: 20, padding: 16, backgroundColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   statusCardOnline: { backgroundColor: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.4)' },
+  debugCard: { marginTop: 10, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(0,0,0,0.28)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', gap: 2 },
+  debugText: { color: '#e5e7eb', fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   statusLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   statusTitle: { color: 'white', fontWeight: '900', fontSize: 15 },
   statusSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginTop: 2 },

@@ -28,6 +28,7 @@ interface IncomingBooking {
 
 interface SocketContextType {
   isConnected: boolean;
+  gpsStatus: string;
   incomingBooking: IncomingBooking | null;
   cancelledBookingId: string | null;
   takenBookingId: string | null;
@@ -43,6 +44,7 @@ interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType>({
   isConnected: false,
+  gpsStatus: 'GPS: idle',
   incomingBooking: null,
   cancelledBookingId: null,
   takenBookingId: null,
@@ -61,6 +63,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const gpsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  // Human-readable last GPS push result, surfaced on the dashboard for debugging
+  // why the backend isn't receiving the agent's live location.
+  const [gpsStatus, setGpsStatus] = useState<string>('GPS: idle');
   // A queue of incoming requests, not a single slot. Two bookings arriving within
   // seconds used to overwrite each other (only the latest survived); now each
   // lines up and is handled independently (bug #7). The overlay always shows the
@@ -98,20 +103,26 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
   // ─── GPS Location Update ───────────────────────────────────────────────
   const pushLocation = useCallback(async () => {
+    const t = () => new Date().toLocaleTimeString();
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         console.log('[GPS] Permission denied');
+        setGpsStatus(`GPS: permission denied @ ${t()}`);
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       console.log('[GPS] Sending coordinates:', loc.coords.longitude, loc.coords.latitude);
+      setGpsStatus(`GPS: sending… @ ${t()}`);
       const res = await apiClient.patch('/agents/location', {
         coordinates: [loc.coords.longitude, loc.coords.latitude],
       });
       console.log('[GPS] Location updated ✓', res.status);
+      setGpsStatus(`GPS: sent ✓ ${res.status} @ ${t()}`);
     } catch (err: any) {
+      const code = err?.response?.status ?? err?.message ?? 'error';
       console.log('[GPS] FAILED — status:', err?.response?.status, '| message:', err?.message, '| data:', JSON.stringify(err?.response?.data));
+      setGpsStatus(`GPS: FAILED ${code} @ ${t()}`);
     }
   }, []);
 
@@ -396,7 +407,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ isConnected, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate, markBookingDead, isBookingDead, suppressBookingPopup }}>
+    <SocketContext.Provider value={{ isConnected, gpsStatus, incomingBooking, cancelledBookingId, takenBookingId, dismissIncomingBooking, clearCancelledBooking, clearTakenBooking, simulateIncomingBooking, emitLocationUpdate, markBookingDead, isBookingDead, suppressBookingPopup }}>
       {children}
     </SocketContext.Provider>
   );
