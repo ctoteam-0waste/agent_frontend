@@ -8,9 +8,8 @@ import React, {
 } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Alert, Vibration, AppState } from 'react-native';
-import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../api/apiClient';
+import { agentService } from '../services/agentService';
 import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
 import { notifySessionInvalid } from '../utils/authEvents';
@@ -104,26 +103,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   // ─── GPS Location Update ───────────────────────────────────────────────
   const pushLocation = useCallback(async () => {
     const t = () => new Date().toLocaleTimeString();
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('[GPS] Permission denied');
-        setGpsStatus(`GPS: permission denied @ ${t()}`);
-        return;
-      }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      console.log('[GPS] Sending coordinates:', loc.coords.longitude, loc.coords.latitude);
-      setGpsStatus(`GPS: sending… @ ${t()}`);
-      const res = await apiClient.patch('/agents/location', {
-        coordinates: [loc.coords.longitude, loc.coords.latitude],
-      });
-      console.log('[GPS] Location updated ✓', res.status);
-      setGpsStatus(`GPS: sent ✓ ${res.status} @ ${t()}`);
-    } catch (err: any) {
-      const code = err?.response?.status ?? err?.message ?? 'error';
-      console.log('[GPS] FAILED — status:', err?.response?.status, '| message:', err?.message, '| data:', JSON.stringify(err?.response?.data));
-      setGpsStatus(`GPS: FAILED ${code} @ ${t()}`);
-    }
+    const r = await agentService.updateLocation();
+    if (r.ok) setGpsStatus(`GPS: sent ✓ ${r.status} @ ${t()}`);
+    else if (r.reason === 'permission denied') setGpsStatus(`GPS: permission denied @ ${t()}`);
+    else setGpsStatus(`GPS: FAILED ${r.reason} @ ${t()}`);
   }, []);
 
   const startGpsTimer = useCallback(() => {
@@ -138,13 +121,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Push location the instant the agent goes online, so the backend's go-online
-  // order-matching runs against a real position — not [0,0] — right away, even if
-  // the socket-connect GPS timer hasn't fired yet (that was why online agents got
-  // no orders: their location stayed [0,0]).
+  // Location pushes are driven by ONLINE status, not the socket. Location goes over
+  // REST, so it must keep updating even when the socket drops. Immediate push + every
+  // 30s while the agent is online; stops the moment they go offline.
   useEffect(() => {
-    if (isOnline) pushLocation();
-  }, [isOnline, pushLocation]);
+    if (isOnline) startGpsTimer();
+    else stopGpsTimer();
+    return () => stopGpsTimer();
+  }, [isOnline, startGpsTimer, stopGpsTimer]);
 
   // ─── Socket Connect ────────────────────────────────────────────────────
   // token is in deps to avoid stale closure — always uses the latest token value
@@ -185,6 +169,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     console.log('[Socket] Connecting to', SOCKET_URL);
     const socket = io(SOCKET_URL, {
       auth: { token: activeToken },
+      // WebSocket only — skip HTTP long-polling. Production runs multiple servers
+      // behind a load balancer; polling requests get split across servers and the
+      // handshake breaks (sticky sessions don't work without cookies on native).
+      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity, // keep retrying — a phone that backgrounds for
       reconnectionDelay: 3000,         // a while must not permanently give up the socket
@@ -195,7 +183,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     socket.on('connect', () => {
       console.log('[Socket] Connected:', socket.id);
       setIsConnected(true);
-      startGpsTimer();
     });
 
     // Debug: log every single event received from server
@@ -203,10 +190,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.log('[Socket] ANY EVENT:', eventName, JSON.stringify(args));
     });
 
-    socket.on('disconnect', () => {
-      console.log('[Socket] Disconnected');
+    socket.on('disconnect', (reason: string) => {
+      console.log('[Socket] Disconnected:', reason);
       setIsConnected(false);
-      stopGpsTimer();
+      // Server forcibly closed the socket (e.g. session superseded by a login
+      // elsewhere). socket.io won't auto-reconnect on this reason, and retrying with
+      // the same token can't succeed — send the agent to the login screen.
+      if (reason === 'io server disconnect') {
+        notifySessionInvalid("You've been signed out. Please log in again.");
+      }
     });
 
     socket.on('connect_error', (err: any) => {

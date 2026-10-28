@@ -244,7 +244,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('agentOnline', String(nextStatus));
 
     try {
-      // Hit the real backend API to sync status
+      // Going online: push the current location FIRST and wait for it, so the
+      // backend's go-online order-matching runs against a real position (not [0,0]),
+      // then flip availability.
+      if (nextStatus) {
+        await agentService.updateLocation();
+      }
       await agentService.toggleAvailability(nextStatus);
     } catch (error) {
       console.warn('Backend toggle failed, synced locally but server not reached:', error);
