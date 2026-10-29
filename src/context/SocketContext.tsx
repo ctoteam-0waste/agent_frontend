@@ -14,6 +14,7 @@ import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
 import { notifySessionInvalid } from '../utils/authEvents';
 import { navigationRef } from '../navigation/navRef';
+import { removeActiveJob } from '../utils/activeJobs';
 
 const SOCKET_URL = 'https://api.karmaverse.earth';
 const GPS_INTERVAL_MS = 30000; // 30 seconds
@@ -332,6 +333,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     socket.on('BOOKING_CANCELLED', (data: { bookingId: string; message: string }) => {
       setCancelledBookingId(data.bookingId);
       deadBookingIdsRef.current.add(data.bookingId);
+      // A cancelled job must not stay in the queue with Resume.
+      removeActiveJob(data.bookingId);
       // Drop this booking from the incoming queue wherever it is (shown or queued).
       setIncomingQueue((prev) => prev.filter((b) => b.bookingId !== data.bookingId));
       addNotification({

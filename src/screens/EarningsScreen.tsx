@@ -7,12 +7,16 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { bookingService } from '../services/bookingService';
+import { agentService } from '../services/agentService';
 import { colors } from '../theme/colors';
 
 export function EarningsScreen() {
   const { agent } = useAuth();
   const { t } = useLanguage();
   const [completedJobs, setCompletedJobs] = useState<any[]>([]);
+  // Totals come from the server: the job list is one page of at most 20.
+  const [totalCompleted, setTotalCompleted] = useState(0);
+  const [monthCompleted, setMonthCompleted] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<any | null>(null);
 
@@ -22,11 +26,16 @@ export function EarningsScreen() {
   const fetchJobs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const jobs = await bookingService.getAgentJobs('completed');
-      const completed = jobs.filter((j: any) => j.status === 'COMPLETED');
-      setCompletedJobs(completed);
+      const [page, summary] = await Promise.all([
+        bookingService.getAgentJobsPage('completed'),
+        agentService.getTodaySummary().catch(() => null),
+      ]);
+      setCompletedJobs(page.items.filter((j: any) => j.status === 'COMPLETED'));
+      setTotalCompleted(page.total);
+      setMonthCompleted(typeof summary?.thisMonthPickups === 'number' ? summary.thisMonthPickups : null);
     } catch {
       setCompletedJobs([]);
+      setTotalCompleted(0);
     } finally {
       setIsLoading(false);
     }
@@ -34,9 +43,9 @@ export function EarningsScreen() {
 
   useFocusEffect(useCallback(() => { fetchJobs(); }, [fetchJobs]));
 
-  const totalPickups = completedJobs.length;
+  const totalPickups = totalCompleted;
   const now = new Date();
-  const thisMonthJobs = completedJobs.filter(j => {
+  const thisMonthJobs = monthCompleted ?? completedJobs.filter(j => {
     const d = new Date(j.updatedAt || j.pickupDate);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;

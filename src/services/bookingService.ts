@@ -16,6 +16,12 @@ function listFrom(body: any): any[] {
   return [];
 }
 
+// A page holds at most 20 jobs, so a count is the server's total, never the page length.
+function totalFrom(body: any, list: any[]): number {
+  const total = body?.pagination?.total ?? body?.data?.pagination?.total ?? body?.data?.total ?? body?.total;
+  return typeof total === 'number' ? total : list.length;
+}
+
 export const bookingService = {
   /**
    * Fetch all available bookings in the queue.
@@ -44,6 +50,22 @@ export const bookingService = {
     try {
       const response = await apiClient.get('/bookings/agent-jobs', view ? { params: { view } } : undefined);
       return listFrom(response.data);
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        throw new Error(error.response.data.message || 'Failed to fetch assigned jobs');
+      }
+      throw new Error(error.message || 'Network error fetching assigned jobs');
+    }
+  },
+
+  /**
+   * Same as getAgentJobs, plus the total across all pages.
+   */
+  getAgentJobsPage: async (view?: 'active' | 'completed' | 'cancelled') => {
+    try {
+      const response = await apiClient.get('/bookings/agent-jobs', view ? { params: { view } } : undefined);
+      const items = listFrom(response.data);
+      return { items, total: totalFrom(response.data, items) };
     } catch (error: any) {
       if (error.response && error.response.data) {
         throw new Error(error.response.data.message || 'Failed to fetch assigned jobs');

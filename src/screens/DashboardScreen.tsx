@@ -57,8 +57,8 @@ export function DashboardScreen({ navigation }: any) {
       .then(bookings => setQueueCount(bookings.length))
       .catch(() => setQueueCount(0));
 
-    bookingService.getAgentJobs('completed')
-      .then(jobs => setRealPickups(jobs.filter((j: any) => j.status === 'COMPLETED').length))
+    bookingService.getAgentJobsPage('completed')
+      .then(page => setRealPickups(page.total))
       .catch(() => {});
 
     agentService.getProfile()
@@ -67,7 +67,9 @@ export function DashboardScreen({ navigation }: any) {
 
     agentService.getTodaySummary()
       .then(summary => {
-        if (summary?.todayPickups !== undefined) setTodayPickups(summary.todayPickups);
+        // The summary counts straight from the database, so it isn't capped by a page.
+        if (summary?.pickupsDone !== undefined) setTodayPickups(summary.pickupsDone);
+        else if (summary?.todayPickups !== undefined) setTodayPickups(summary.todayPickups);
         if (summary?.thisMonthPickups !== undefined) setThisMonthPickups(summary.thisMonthPickups);
         if (summary?.totalPickups !== undefined) setRealPickups(summary.totalPickups);
         if (summary?.avgRating !== undefined) updateAgent({ rating: summary.avgRating });
