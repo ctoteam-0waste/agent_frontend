@@ -12,10 +12,11 @@ import { useSocket } from '../context/SocketContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { queuePendingAccept, clearPendingAccept, retryPendingAccept, resumeAllPendingAccepts } from '../utils/pendingAccepts';
 
-// Backend booking statuses (booking.model.js) that mean "an agent already
-// owns this and it isn't finished yet". There is no ACCEPTED/IN_TRANSIT
-// status on the backend — accepting a booking moves it to ASSIGNED.
-const ACTIVE_JOB_STATUSES = ['ASSIGNED', 'REACHED', 'VERIFIED', 'PICKED_UP', 'WAREHOUSE_REACHED'];
+// A job assigned to this agent stays resumable until it reaches one of these.
+// Listing the finished statuses instead of the in-progress ones means a status
+// the app doesn't know yet (e.g. VERIFICATION after weighing) can't hide a job
+// the agent still has to complete.
+const FINISHED_JOB_STATUSES = ['COMPLETED', 'CANCELLED', 'CANCELED', 'DECLINED', 'EXPIRED', 'REJECTED', 'FAILED'];
 
 const CATEGORY_COLORS: any = {
   plastic: '#3b82f6', metal: '#6366f1', 'e-waste': '#8b5cf6',
@@ -161,7 +162,7 @@ export function QueueScreen({ navigation }: any) {
     try {
       const [availableRes, agentJobsRes] = await Promise.all([
         bookingService.getAvailableBookings().catch(() => null),
-        bookingService.getAgentJobs('active').catch(() => null),
+        bookingService.getAgentJobs().catch(() => null),
       ]);
 
       // Available bookings — drop any this agent already finished with (expired /
@@ -171,24 +172,22 @@ export function QueueScreen({ navigation }: any) {
         : Array.isArray(availableRes) ? availableRes : [];
       setQueue(rawAvailable.filter((b: any) => !isBookingDead(b._id || b.id)));
 
-      // Every booking the server has already assigned to this agent. The
-      // backend's ?view=active filter already restricts this, but we re-filter
-      // defensively so a slightly different status set can't leak in.
-      const jobs = agentJobsRes?.data || agentJobsRes || [];
-      const actives = Array.isArray(jobs)
-        ? jobs.filter((j: any) => ACTIVE_JOB_STATUSES.includes(j.status))
-        : [];
-      setActiveJobs(actives);
-
-      // Only ever treat a booking as "ours" once the server confirms it —
-      // a booking still pending sync stays unconfirmed until then, never shown
-      // as an active/resumable job.
-      actives.forEach((a: any) => clearPendingAccept(a._id || a.id));
+      // Every booking assigned to this agent that isn't finished. Read from the full
+      // list rather than ?view=active, whose status set is the server's and has hidden
+      // in-progress jobs. A failed fetch keeps the jobs already shown — clearing them
+      // made an accepted job vanish whenever one poll failed on a slow network.
+      if (agentJobsRes) {
+        const jobs = agentJobsRes?.data || agentJobsRes || [];
+        const actives = Array.isArray(jobs)
+          ? jobs.filter((j: any) => j.status && !FINISHED_JOB_STATUSES.includes(j.status))
+          : [];
+        setActiveJobs(actives);
+        actives.forEach((a: any) => clearPendingAccept(a._id || a.id));
+      }
 
     } catch (error: any) {
       console.warn('Queue fetch error:', error.message);
       setQueue([]);
-      setActiveJobs([]);
     } finally {
       setIsLoading(false);
       setRefreshing(false);

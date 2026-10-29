@@ -174,10 +174,12 @@ export function JobFlowScreen({ navigation, route }: any) {
 
   const userCoords = booking.address?.location?.coordinates as [number, number] | undefined; // [lng, lat]
 
-  // Map backend status → frontend step so resume works correctly
+  // Map backend status → frontend step so resume works correctly. Once the weights
+  // are verified the job resumes at "Pickup done", not back at the weights step,
+  // which asked the agent to verify a second time instead of completing it.
   const getInitialStep = (status: string) => {
     if (status === 'REACHED') return 1;
-    if (status === 'VERIFICATION' || status === 'PICKED_UP' || status === 'VERIFIED') return 2;
+    if (['VERIFICATION', 'PICKED_UP', 'VERIFIED', 'WAREHOUSE_REACHED'].includes(status)) return 3;
     return 0; // ASSIGNED or unknown → navigating to user
   };
 
