@@ -10,6 +10,8 @@ export type SavedJob = {
   bookingId: string;
   booking: any;
   step: number;
+  // The weights form as the agent left it, so a resume doesn't make them re-enter it.
+  draft?: any[];
   savedAt: number;
 };
 
@@ -32,11 +34,11 @@ export async function getSavedJobs(): Promise<SavedJob[]> {
   return readAll();
 }
 
-export async function saveActiveJob(booking: any, step: number) {
+export async function saveActiveJob(booking: any, step: number, draft?: any[]) {
   const bookingId = booking?._id || booking?.id;
   if (!bookingId) return;
   const list = (await readAll()).filter(j => j.bookingId !== bookingId);
-  list.push({ bookingId, booking, step, savedAt: Date.now() });
+  list.push({ bookingId, booking, step, draft, savedAt: Date.now() });
   await writeAll(list);
 }
 

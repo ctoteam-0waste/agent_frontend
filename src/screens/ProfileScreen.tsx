@@ -30,12 +30,8 @@ export function ProfileScreen() {
       .then(profile => { if (profile) updateAgent(profile); })
       .catch(() => {});
 
-    bookingService.getAgentJobs()
-      .then(res => {
-        const jobs = res?.data || res || [];
-        const completed = Array.isArray(jobs) ? jobs.filter((j: any) => j.status === 'COMPLETED') : [];
-        setTotalPickups(completed.length);
-      })
+    bookingService.getAgentJobs('completed')
+      .then(jobs => setTotalPickups(jobs.filter((j: any) => j.status === 'COMPLETED').length))
       .catch(() => {});
   }, []));
 

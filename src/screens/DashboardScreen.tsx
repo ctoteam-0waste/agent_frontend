@@ -54,18 +54,11 @@ export function DashboardScreen({ navigation }: any) {
     refreshNotifs();
 
     bookingService.getAvailableBookings()
-      .then(res => {
-        const data = res?.data || res || [];
-        setQueueCount(Array.isArray(data) ? data.length : 0);
-      })
+      .then(bookings => setQueueCount(bookings.length))
       .catch(() => setQueueCount(0));
 
-    bookingService.getAgentJobs()
-      .then(res => {
-        const jobs = res?.data || res || [];
-        const completed = Array.isArray(jobs) ? jobs.filter((j: any) => j.status === 'COMPLETED') : [];
-        setRealPickups(completed.length);
-      })
+    bookingService.getAgentJobs('completed')
+      .then(jobs => setRealPickups(jobs.filter((j: any) => j.status === 'COMPLETED').length))
       .catch(() => {});
 
     agentService.getProfile()

@@ -157,7 +157,7 @@ function WasteItem({ item, onUpdate, onConditionChange, onRemove }: any) {
 }
 
 export function JobFlowScreen({ navigation, route }: any) {
-  const { booking, resumeStep } = route.params;
+  const { booking, resumeStep, resumeDraft } = route.params;
   const bookingId = booking._id || booking.id;
 
   const { cancelledBookingId, clearCancelledBooking, emitLocationUpdate } = useSocket();
@@ -188,15 +188,18 @@ export function JobFlowScreen({ navigation, route }: any) {
   // last reached on this device (moving to the weights screen is local only).
   const [currentStep, setCurrentStep] = useState(Math.max(getInitialStep(booking.status), resumeStep ?? 0));
   const [isLoading, setIsLoading] = useState(false);
-
-  // Keep the job (and its step) on the device until it is completed or cancelled,
-  // so backing out or closing the app leaves it in the queue to resume.
-  useEffect(() => {
-    saveActiveJob(booking, currentStep);
-  }, [currentStep]);
   const [wasteItems, setWasteItems] = useState(
-    (booking.categories || []).map((c: any) => ({ ...c, qty: '' }))
+    Array.isArray(resumeDraft) && resumeDraft.length > 0
+      ? resumeDraft
+      : (booking.categories || []).map((c: any) => ({ ...c, qty: '' }))
   );
+
+  // Keep the job, its step and the weights entered so far on the device until it is
+  // completed or cancelled, so backing out or closing the app leaves it in the queue
+  // to resume where the agent stopped.
+  useEffect(() => {
+    saveActiveJob(booking, currentStep, wasteItems);
+  }, [currentStep, wasteItems]);
   const [notes, setNotes] = useState('');
 
   // "Add Item" picker — extra items handed over at pickup that weren't in the

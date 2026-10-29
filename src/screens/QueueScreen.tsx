@@ -167,34 +167,38 @@ export function QueueScreen({ navigation }: any) {
     try {
       const [availableRes, agentJobsRes, saved] = await Promise.all([
         bookingService.getAvailableBookings().catch(() => null),
-        bookingService.getAgentJobs().catch(() => null),
+        bookingService.getAgentJobs('active').catch(() => null),
         getSavedJobs(),
       ]);
 
-      // Every booking assigned to this agent that isn't finished. Read from the full
-      // list rather than ?view=active, whose status set is the server's and has hidden
-      // in-progress jobs. A failed fetch keeps the jobs already shown — clearing them
-      // made an accepted job vanish whenever one poll failed on a slow network.
-      const finishedIds = new Set<string>();
+      // The agent's unfinished jobs. ?view=active rather than the full list, which is
+      // paginated and drops an active job behind 20 newer completed ones. A failed
+      // fetch keeps the jobs already shown — clearing them made an accepted job vanish
+      // whenever one poll failed on a slow network.
       if (agentJobsRes) {
-        const jobs = agentJobsRes?.data || agentJobsRes || [];
-        const list = Array.isArray(jobs) ? jobs : [];
-        list.forEach((j: any) => {
-          if (FINISHED_JOB_STATUSES.includes(j.status)) finishedIds.add(jobId(j));
-        });
-        serverActivesRef.current = list.filter((j: any) => j.status && !FINISHED_JOB_STATUSES.includes(j.status));
+        serverActivesRef.current = agentJobsRes.filter((j: any) => !FINISHED_JOB_STATUSES.includes(j.status));
         serverActivesRef.current.forEach((a: any) => clearPendingAccept(jobId(a)));
       }
 
-      // Jobs the agent opened on this device and hasn't finished stay listed with
-      // Resume even when the server's list leaves them out. One the server reports
-      // finished (completed, cancelled) is dropped from the device.
+      // Jobs the agent opened on this device stay listed with Resume even when the
+      // server's list leaves them out. For those, ask the server for the booking: one
+      // it reports finished (completed, cancelled) is dropped from the device; one it
+      // can't be asked about right now stays.
       const serverIds = new Set(serverActivesRef.current.map(jobId));
-      const localOnly: any[] = [];
-      saved.forEach((s) => {
-        if (finishedIds.has(s.bookingId)) removeActiveJob(s.bookingId);
-        else if (!serverIds.has(s.bookingId)) localOnly.push(s.booking);
-      });
+      const localOnly = (await Promise.all(
+        saved
+          .filter((s) => !serverIds.has(s.bookingId))
+          .map(async (s) => {
+            const status = await bookingService.getBookingDetails(s.bookingId)
+              .then((body: any) => (body?.data ?? body)?.status)
+              .catch(() => undefined);
+            if (status && FINISHED_JOB_STATUSES.includes(status)) {
+              removeActiveJob(s.bookingId);
+              return null;
+            }
+            return status ? { ...s.booking, status } : s.booking;
+          })
+      )).filter(Boolean);
       const actives = [...serverActivesRef.current, ...localOnly];
       setActiveJobs(actives);
 
@@ -202,10 +206,7 @@ export function QueueScreen({ navigation }: any) {
       // declined / taken / cancelled) or already holds, so a stale server list
       // can't resurrect them.
       const activeIds = new Set(actives.map(jobId));
-      const rawAvailable = availableRes?.success && Array.isArray(availableRes.data)
-        ? availableRes.data
-        : Array.isArray(availableRes) ? availableRes : [];
-      setQueue(rawAvailable.filter((b: any) => !isBookingDead(jobId(b)) && !activeIds.has(jobId(b))));
+      setQueue((availableRes || []).filter((b: any) => !isBookingDead(jobId(b)) && !activeIds.has(jobId(b))));
 
     } catch (error: any) {
       console.warn('Queue fetch error:', error.message);
@@ -250,7 +251,7 @@ export function QueueScreen({ navigation }: any) {
 
   const handleResumeJob = async (item: any) => {
     const saved = (await getSavedJobs()).find((s) => s.bookingId === jobId(item));
-    navigation.navigate('JobFlow', { booking: item, resumeStep: saved?.step });
+    navigation.navigate('JobFlow', { booking: item, resumeStep: saved?.step, resumeDraft: saved?.draft });
   };
 
   const handleAcceptJob = async (item: any) => {
@@ -289,9 +290,8 @@ export function QueueScreen({ navigation }: any) {
       // agent proceed into JobFlow on a booking that was never confirmed
       // assigned to them, since only one agent can ever hold a given booking.
       try {
-        const jobsRes = await bookingService.getAgentJobs();
-        const jobs = jobsRes?.data || jobsRes || [];
-        const nowMine = Array.isArray(jobs) ? jobs.find((j: any) => (j._id || j.id) === bookingId) : null;
+        const jobs = await bookingService.getAgentJobs('active');
+        const nowMine = jobs.find((j: any) => jobId(j) === bookingId);
         if (nowMine) {
           navigation.navigate('JobFlow', { booking: nowMine });
           return;

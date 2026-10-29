@@ -22,9 +22,8 @@ export function EarningsScreen() {
   const fetchJobs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await bookingService.getAgentJobs();
-      const jobs = res?.data || res || [];
-      const completed = Array.isArray(jobs) ? jobs.filter((j: any) => j.status === 'COMPLETED') : [];
+      const jobs = await bookingService.getAgentJobs('completed');
+      const completed = jobs.filter((j: any) => j.status === 'COMPLETED');
       setCompletedJobs(completed);
     } catch {
       setCompletedJobs([]);

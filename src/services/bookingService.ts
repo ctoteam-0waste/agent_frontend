@@ -6,15 +6,26 @@ export interface BookingItem {
   quantity: number;
 }
 
+// The list endpoints have answered both `{ data: [...] }` and a paginated
+// `{ data: { items: [...] } }` (agent-jobs from 23 Sep). Reading only the first shape
+// made every list come back empty, so accepted jobs vanished from the queue.
+function listFrom(body: any): any[] {
+  const data = body?.data ?? body;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+
 export const bookingService = {
   /**
    * Fetch all available bookings in the queue.
    * GET /bookings/available
+   * Returns the list itself, whichever response shape the server sends.
    */
   getAvailableBookings: async () => {
     try {
       const response = await apiClient.get('/bookings/available');
-      return response.data;
+      return listFrom(response.data);
     } catch (error: any) {
       if (error.response && error.response.data) {
         throw new Error(error.response.data.message || 'Failed to fetch available queue');
@@ -26,12 +37,13 @@ export const bookingService = {
   /**
    * Fetch jobs for the active agent.
    * GET /bookings/agent-jobs[?view=active|completed|cancelled]
-   * Omitting `view` returns every booking (any status) — used by History.
+   * Omitting `view` returns every booking (any status), paginated.
+   * Returns the list itself, whichever response shape the server sends.
    */
   getAgentJobs: async (view?: 'active' | 'completed' | 'cancelled') => {
     try {
       const response = await apiClient.get('/bookings/agent-jobs', view ? { params: { view } } : undefined);
-      return response.data;
+      return listFrom(response.data);
     } catch (error: any) {
       if (error.response && error.response.data) {
         throw new Error(error.response.data.message || 'Failed to fetch assigned jobs');
