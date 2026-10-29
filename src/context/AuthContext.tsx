@@ -232,6 +232,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem('agentToken');
     await AsyncStorage.removeItem('agentData');
     await AsyncStorage.removeItem('agentOnline');
+    // Jobs kept for Resume belong to this agent, not the next one to log in here.
+    await AsyncStorage.removeItem('activeJobs');
   };
 
   /**

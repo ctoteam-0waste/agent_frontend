@@ -19,6 +19,7 @@ import { useSocket } from '../context/SocketContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { saveActiveJob, removeActiveJob } from '../utils/activeJobs';
 
 // The Mappls native map only exists in a real build (APK), not in Expo Go.
 // Detect whether the native view manager is registered; if not, we skip the
@@ -156,7 +157,7 @@ function WasteItem({ item, onUpdate, onConditionChange, onRemove }: any) {
 }
 
 export function JobFlowScreen({ navigation, route }: any) {
-  const { booking } = route.params;
+  const { booking, resumeStep } = route.params;
   const bookingId = booking._id || booking.id;
 
   const { cancelledBookingId, clearCancelledBooking, emitLocationUpdate } = useSocket();
@@ -183,8 +184,16 @@ export function JobFlowScreen({ navigation, route }: any) {
     return 0; // ASSIGNED or unknown → navigating to user
   };
 
-  const [currentStep, setCurrentStep] = useState(getInitialStep(booking.status));
+  // A resumed job opens at the furthest of the server's step and the step the agent
+  // last reached on this device (moving to the weights screen is local only).
+  const [currentStep, setCurrentStep] = useState(Math.max(getInitialStep(booking.status), resumeStep ?? 0));
   const [isLoading, setIsLoading] = useState(false);
+
+  // Keep the job (and its step) on the device until it is completed or cancelled,
+  // so backing out or closing the app leaves it in the queue to resume.
+  useEffect(() => {
+    saveActiveJob(booking, currentStep);
+  }, [currentStep]);
   const [wasteItems, setWasteItems] = useState(
     (booking.categories || []).map((c: any) => ({ ...c, qty: '' }))
   );
@@ -264,6 +273,7 @@ export function JobFlowScreen({ navigation, route }: any) {
   useEffect(() => {
     if (!cancelledBookingId || cancelledBookingId !== bookingId) return;
     clearCancelledBooking();
+    removeActiveJob(bookingId);
     Alert.alert(
       t('bookingCancelledTitle'),
       t('bookingCancelledMsg'),
@@ -368,6 +378,7 @@ export function JobFlowScreen({ navigation, route }: any) {
         // Step 3 -> Closure: Complete at warehouse
         try {
           await bookingService.completeBooking(bookingId);
+          await removeActiveJob(bookingId);
           await updateAgent({ isFirstTime: false });
           addNotification({
             type: 'COMPLETED',

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   StatusBar, SafeAreaView, RefreshControl, ActivityIndicator, Alert
@@ -11,6 +11,9 @@ import { useLanguage } from '../context/LanguageContext';
 import { useSocket } from '../context/SocketContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { queuePendingAccept, clearPendingAccept, retryPendingAccept, resumeAllPendingAccepts } from '../utils/pendingAccepts';
+import { getSavedJobs, removeActiveJob } from '../utils/activeJobs';
+
+const jobId = (j: any) => j?._id || j?.id;
 
 // A job assigned to this agent stays resumable until it reaches one of these.
 // Listing the finished statuses instead of the in-progress ones means a status
@@ -156,34 +159,53 @@ export function QueueScreen({ navigation }: any) {
   const [activeJobs, setActiveJobs] = useState<any[]>([]);
   const { t } = useLanguage();
   const { takenBookingId, clearTakenBooking, isBookingDead } = useSocket();
+  // The server's unfinished jobs from the last fetch that succeeded.
+  const serverActivesRef = useRef<any[]>([]);
 
   const fetchData = useCallback(async (showLoader = false) => {
     if (showLoader) setIsLoading(true);
     try {
-      const [availableRes, agentJobsRes] = await Promise.all([
+      const [availableRes, agentJobsRes, saved] = await Promise.all([
         bookingService.getAvailableBookings().catch(() => null),
         bookingService.getAgentJobs().catch(() => null),
+        getSavedJobs(),
       ]);
-
-      // Available bookings — drop any this agent already finished with (expired /
-      // declined / taken / cancelled), so a stale server list can't resurrect them.
-      const rawAvailable = availableRes?.success && Array.isArray(availableRes.data)
-        ? availableRes.data
-        : Array.isArray(availableRes) ? availableRes : [];
-      setQueue(rawAvailable.filter((b: any) => !isBookingDead(b._id || b.id)));
 
       // Every booking assigned to this agent that isn't finished. Read from the full
       // list rather than ?view=active, whose status set is the server's and has hidden
       // in-progress jobs. A failed fetch keeps the jobs already shown — clearing them
       // made an accepted job vanish whenever one poll failed on a slow network.
+      const finishedIds = new Set<string>();
       if (agentJobsRes) {
         const jobs = agentJobsRes?.data || agentJobsRes || [];
-        const actives = Array.isArray(jobs)
-          ? jobs.filter((j: any) => j.status && !FINISHED_JOB_STATUSES.includes(j.status))
-          : [];
-        setActiveJobs(actives);
-        actives.forEach((a: any) => clearPendingAccept(a._id || a.id));
+        const list = Array.isArray(jobs) ? jobs : [];
+        list.forEach((j: any) => {
+          if (FINISHED_JOB_STATUSES.includes(j.status)) finishedIds.add(jobId(j));
+        });
+        serverActivesRef.current = list.filter((j: any) => j.status && !FINISHED_JOB_STATUSES.includes(j.status));
+        serverActivesRef.current.forEach((a: any) => clearPendingAccept(jobId(a)));
       }
+
+      // Jobs the agent opened on this device and hasn't finished stay listed with
+      // Resume even when the server's list leaves them out. One the server reports
+      // finished (completed, cancelled) is dropped from the device.
+      const serverIds = new Set(serverActivesRef.current.map(jobId));
+      const localOnly: any[] = [];
+      saved.forEach((s) => {
+        if (finishedIds.has(s.bookingId)) removeActiveJob(s.bookingId);
+        else if (!serverIds.has(s.bookingId)) localOnly.push(s.booking);
+      });
+      const actives = [...serverActivesRef.current, ...localOnly];
+      setActiveJobs(actives);
+
+      // Available bookings — drop any this agent already finished with (expired /
+      // declined / taken / cancelled) or already holds, so a stale server list
+      // can't resurrect them.
+      const activeIds = new Set(actives.map(jobId));
+      const rawAvailable = availableRes?.success && Array.isArray(availableRes.data)
+        ? availableRes.data
+        : Array.isArray(availableRes) ? availableRes : [];
+      setQueue(rawAvailable.filter((b: any) => !isBookingDead(jobId(b)) && !activeIds.has(jobId(b))));
 
     } catch (error: any) {
       console.warn('Queue fetch error:', error.message);
@@ -226,8 +248,9 @@ export function QueueScreen({ navigation }: any) {
     fetchData(false);
   };
 
-  const handleResumeJob = (item: any) => {
-    navigation.navigate('JobFlow', { booking: item });
+  const handleResumeJob = async (item: any) => {
+    const saved = (await getSavedJobs()).find((s) => s.bookingId === jobId(item));
+    navigation.navigate('JobFlow', { booking: item, resumeStep: saved?.step });
   };
 
   const handleAcceptJob = async (item: any) => {
