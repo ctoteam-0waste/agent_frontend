@@ -107,6 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setSessionInvalidHandler(async (message) => {
       if (sessionInvalidHandledRef.current) return;
+      // Already logged out: nothing expired, so no alert over the login screen.
+      if (!(await AsyncStorage.getItem('agentToken'))) return;
       sessionInvalidHandledRef.current = true;
 
       setToken(null);

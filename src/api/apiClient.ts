@@ -36,12 +36,15 @@ apiClient.interceptors.request.use(
 // wrong-password login attempts are also 401s, but those aren't a session
 // problem), hand off to AuthContext to clear the session and notify the user.
 // This covers both plain token expiry and a newer login elsewhere having
-// superseded this device's session.
+// superseded this device's session. A request sent with no token at all (a background
+// call on the login screen) also gets a 401, but there is no session to expire —
+// treating it as one showed "Session expired" before the agent had logged in.
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const isLoginRequest = error?.config?.url?.includes('/auth/login');
-    if (error?.response?.status === 401 && !isLoginRequest) {
+    const sentToken = !!error?.config?.headers?.Authorization;
+    if (error?.response?.status === 401 && !isLoginRequest && sentToken) {
       notifySessionInvalid(error?.response?.data?.message);
     }
     return Promise.reject(error);
