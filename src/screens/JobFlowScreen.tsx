@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Alert, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager, Modal, Linking
+  StatusBar, Alert, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, UIManager, Modal, Linking
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft, MapPin, Clock, Phone,
@@ -480,7 +481,7 @@ export function JobFlowScreen({ navigation, route }: any) {
 
       {/* Header */}
       <LinearGradient colors={[colors.primaryDeep, colors.primaryDark]} style={styles.header}>
-        <SafeAreaView>
+        <SafeAreaView edges={['top']}>
           <View style={styles.headerRow}>
             <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
               <ChevronLeft size={22} color="white" />

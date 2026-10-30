@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, SafeAreaView, RefreshControl, ActivityIndicator, Alert
+  StatusBar, RefreshControl, ActivityIndicator, Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Package, MapPin, Clock, ChevronRight, X, PlayCircle } from 'lucide-react-native';
 import { colors } from '../theme/colors';
@@ -340,7 +341,7 @@ export function QueueScreen({ navigation }: any) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primaryDeep} />
       <LinearGradient colors={[colors.primaryDeep, colors.primaryDark]} style={styles.header}>
-        <SafeAreaView>
+        <SafeAreaView edges={['top']}>
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.headerSub}>{t('nearbyPickups')}</Text>

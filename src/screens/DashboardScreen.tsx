@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, SafeAreaView, Switch, Platform, Dimensions, Animated, Modal
+  StatusBar, Switch, Platform, Dimensions, Animated, Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bell, Flame, Package, ChevronRight, Truck, Star, Wifi, WifiOff, Lock, PlayCircle, BookOpen, Wallet, Award, X } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -140,7 +141,7 @@ export function DashboardScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor={colors.primaryDeep} />
 
       <LinearGradient colors={[colors.primaryDeep, colors.primaryDark]} style={styles.header}>
-        <SafeAreaView>
+        <SafeAreaView edges={['top']}>
           <View style={styles.headerRow}>
             <View style={styles.agentInfo}>
               <View style={styles.avatar}>
@@ -177,12 +178,14 @@ export function DashboardScreen({ navigation }: any) {
             <Switch value={isOnline} onValueChange={handleToggle} thumbColor={isOnline ? colors.online : '#f4f3f4'} trackColor={{ false: '#d1d5db', true: colors.online + '50' }} />
           </View>
 
-          {/* Live-location debug indicator — temporary, to diagnose why the backend
-              isn't receiving the agent's GPS. Remove once the issue is resolved. */}
-          <View style={styles.debugCard}>
-            <Text style={styles.debugText}>Socket: {isConnected ? 'connected ✓' : 'disconnected ✗'}</Text>
-            <Text style={styles.debugText}>{gpsStatus}</Text>
-          </View>
+          {/* Live-location debug indicator, to diagnose why the backend isn't receiving
+              the agent's GPS. Development builds only — agents never see it. */}
+          {__DEV__ && (
+            <View style={styles.debugCard}>
+              <Text style={styles.debugText}>Socket: {isConnected ? 'connected ✓' : 'disconnected ✗'}</Text>
+              <Text style={styles.debugText}>{gpsStatus}</Text>
+            </View>
+          )}
 
         </SafeAreaView>
       </LinearGradient>

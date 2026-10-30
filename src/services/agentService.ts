@@ -10,7 +10,14 @@ export const agentService = {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return { ok: false, reason: 'permission denied' };
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      // A fresh fix can wait indefinitely (indoors, an emulator with no location set),
+      // which left every push pending. Give it 20s, then use the last known fix.
+      const fresh = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000)),
+      ]);
+      const loc = fresh ?? await Location.getLastKnownPositionAsync();
+      if (!loc) return { ok: false, reason: 'no GPS fix' };
       const res = await apiClient.patch('/agents/location', {
         coordinates: [loc.coords.longitude, loc.coords.latitude],
       });
